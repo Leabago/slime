@@ -13,18 +13,26 @@ import (
 )
 
 const (
-	ScreenWidth  = 1300
-	ScreenHeight = 800
+	ScreenWidth    = 1300
+	ScreenHeight   = 800
+	multiplyChartX = 50
+	multiplyChartY = -100
+	groundBuffSize = 40
 )
 
 type Game struct {
-	ground       []Segment
+	ground     []Segment
+	groundBuff [2][]Segment
+
 	ball         *Ball
 	collisionSeg []Segment
 	camera       *Camera
 	score        int
 	fractions    []Vector
 	frameTimer   *Timer
+
+	lastXinChart    float64
+	gameParallelSeg []Segment
 }
 
 func (g *Game) Update() error {
@@ -34,17 +42,41 @@ func (g *Game) Update() error {
 	if g.frameTimer.IsReady() {
 		g.frameTimer.Reset()
 
-		if len(g.fractions) > 20 {
+		if len(g.fractions) > 10 {
 			g.fractions = g.fractions[1:len(g.fractions)]
 		}
 	}
 
-	err := g.ball.Update(&g.score, g.collisionSeg, &g.fractions)
+	groundFromBuff := make([]Segment, groundBuffSize*2)
+	for _, g := range g.groundBuff[0] {
+		groundFromBuff = append(groundFromBuff, g)
+	}
+	for _, g := range g.groundBuff[1] {
+		groundFromBuff = append(groundFromBuff, g)
+	}
+
+	lastBuffX := 0.0
+	lastXSecBuff := g.groundBuff[1][len(g.groundBuff[1])-1].b.x
+	err := g.ball.Update(&g.score, &g.collisionSeg, &g.fractions, groundFromBuff, &lastBuffX, g.groundBuff[0][0].a.x, lastXSecBuff)
 	if err != nil {
 		return err
 	}
 
-	g.ball.CheckCollisions(&g.collisionSeg, g.ground)
+	if lastBuffX >= (g.groundBuff[1][0]).b.x && g.lastXinChart > lastXSecBuff {
+		secondBuffI := int(lastXSecBuff)
+		secondBuffI /= multiplyChartX
+		g.groundBuff[0] = g.groundBuff[1]
+		g.groundBuff[1] = []Segment{}
+
+		plusGroundBuffSize := groundBuffSize
+		if secondBuffI+groundBuffSize > len(g.ground)-1 {
+			plusGroundBuffSize = len(g.ground) - secondBuffI
+		}
+
+		for i := secondBuffI; i < secondBuffI+plusGroundBuffSize; i++ {
+			g.groundBuff[1] = append(g.groundBuff[1], g.ground[i])
+		}
+	}
 
 	// Update camera
 	g.camera.Update(g.ball.pos.x, g.ball.pos.y)
@@ -58,7 +90,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Draw ground
 	for _, seg := range g.ground {
 		ebitenutil.DrawLine(screen, seg.a.x-g.camera.X, seg.a.y-g.camera.Y, seg.b.x-g.camera.X, seg.b.y-g.camera.Y, color.RGBA{100, 200, 100, 255})
+	}
 
+	for _, seg := range g.groundBuff[0] {
+		ebitenutil.DrawLine(screen, seg.a.x-g.camera.X, seg.a.y-g.camera.Y-5, seg.b.x-g.camera.X, seg.b.y-g.camera.Y-5, color.RGBA{255, 200, 100, 255})
+	}
+
+	for _, seg := range g.groundBuff[1] {
+		ebitenutil.DrawLine(screen, seg.a.x-g.camera.X, seg.a.y-g.camera.Y+5, seg.b.x-g.camera.X, seg.b.y-g.camera.Y+5, color.RGBA{0, 100, 200, 255})
+	}
+
+	for _, seg := range g.gameParallelSeg {
+		ebitenutil.DrawLine(screen, seg.a.x-g.camera.X, seg.a.y-g.camera.Y, seg.b.x-g.camera.X, seg.b.y-g.camera.Y, color.RGBA{100, 100, 255, 255})
 	}
 
 	// Draw wheel
@@ -109,7 +152,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 func NewGame() *Game {
 
 	// Open the CSV file
-	file, err := os.Open("game_AAPL3.csv")
+	file, err := os.Open("game_AAPL.csv")
 	if err != nil {
 		panic(err)
 	}
@@ -127,9 +170,7 @@ func NewGame() *Game {
 	groundPoints := []Vector{}
 
 	// Print each record
-	maxY := 0.0
 	for _, record := range records {
-
 		x := record[0]
 		y := record[1]
 
@@ -143,19 +184,10 @@ func NewGame() *Game {
 			panic(err)
 		}
 
-		// xStr *= 30
-		// yStr *= (-10)
-		groundPoints = append(groundPoints, Vector{xStr * 50, yStr * 20 * (-1)})
-
-		if math.Abs(yStr) > maxY {
-			maxY = math.Abs(yStr)
-		}
+		groundPoints = append(groundPoints, Vector{xStr * multiplyChartX, yStr * multiplyChartY})
 	}
 
-	for _, g := range groundPoints {
-		g.y += maxY
-	}
-
+	lastX := 0.0
 	segments := make([]Segment, len(groundPoints)-1)
 	for i := 0; i < len(groundPoints)-1; i++ {
 		segments[i] = Segment{
@@ -163,15 +195,26 @@ func NewGame() *Game {
 			b: groundPoints[i+1],
 		}
 
+		lastX = groundPoints[i+1].x
 	}
 
-	b := NewBall(segments[3])
+	buff := [2][]Segment{}
+
+	for i := 0; i < groundBuffSize; i++ {
+		buff[0] = append(buff[0], segments[i])
+	}
+
+	for i := groundBuffSize; i < groundBuffSize+groundBuffSize; i++ {
+		buff[1] = append(buff[1], segments[i])
+	}
 
 	game := &Game{
-		frameTimer: NewTimer(80 * time.Millisecond),
-		score:      1000,
-		ground:     segments,
-		ball:       b,
+		frameTimer:   NewTimer(80 * time.Millisecond),
+		score:        1000,
+		ground:       segments,
+		groundBuff:   buff,
+		ball:         NewBall(segments[0]),
+		lastXinChart: lastX,
 
 		camera: &Camera{
 			Width:  float64(ScreenWidth),
