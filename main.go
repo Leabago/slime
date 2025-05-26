@@ -12,6 +12,7 @@ func main() {
 
 	ebiten.SetWindowSize(game.ScreenWidth, game.ScreenHeight)
 	ebiten.SetWindowTitle("Slime")
+
 	if err := ebiten.RunGame(g); err != nil {
 		panic(err)
 	}

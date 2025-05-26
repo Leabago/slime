@@ -1,6 +1,10 @@
 package game
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"math"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 type Ball struct {
 	pos         Vector
@@ -15,8 +19,14 @@ type Ball struct {
 }
 
 func NewBall(seg Segment) *Ball {
+
+	maxY := seg.a.y
+	if math.Abs(seg.b.y) > math.Abs(seg.a.y) {
+		maxY = seg.b.y
+	}
+
 	ball := &Ball{
-		pos:          Vector{seg.a.x, seg.a.y - ballPhysicA.radius},
+		pos:          Vector{seg.a.x, maxY - ballPhysicA.radius},
 		vel:          Vector{0, 0},
 		radius:       ballPhysicA.radius,
 		currPhyState: &ballPhysicA,
