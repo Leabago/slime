@@ -16,17 +16,13 @@ type Ball struct {
 
 	jumpVel      Vector
 	currPhyState *BallPhysic
+	savePoint    *SavePoint
 }
 
-func NewBall(seg Segment) *Ball {
-
-	maxY := seg.a.y
-	if math.Abs(seg.b.y) > math.Abs(seg.a.y) {
-		maxY = seg.b.y
-	}
+func NewBall(spawnPos Vector) *Ball {
 
 	ball := &Ball{
-		pos:          Vector{seg.a.x, maxY - ballPhysicA.radius},
+		pos:          Vector{spawnPos.X, spawnPos.Y},
 		vel:          Vector{0, 0},
 		radius:       ballPhysicA.radius,
 		currPhyState: &ballPhysicA,
@@ -35,7 +31,7 @@ func NewBall(seg Segment) *Ball {
 	return ball
 }
 
-func (b *Ball) Update(score *int, collisionSeg *[]Segment, fraction *[]Vector, ground []Segment, lastX *float64, minLeftX float64, maxLeftX float64) error {
+func (b *Ball) Update(score *int, collisionSeg *[]Segment, fraction *[]Vector, ground []*Segment, lastX *float64, minLeftX float64, maxLeftX float64) error {
 
 	// change state
 	b.currPhyState = &ballPhysicA
@@ -48,26 +44,26 @@ func (b *Ball) Update(score *int, collisionSeg *[]Segment, fraction *[]Vector, g
 	// Move left/right
 	if ebiten.IsKeyPressed(ebiten.KeyRight) {
 
-		b.vel.x += b.currPhyState.speedRun
+		b.vel.X += b.currPhyState.speedRun
 		b.facingRight = false
 
-		if b.vel.x < 0 {
-			b.vel.x = 0
+		if b.vel.X < 0 {
+			b.vel.X = 0
 		}
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyLeft) {
 
-		b.vel.x -= b.currPhyState.speedRun
+		b.vel.X -= b.currPhyState.speedRun
 		b.facingRight = true
 
-		if b.vel.x > 0 {
-			b.vel.x = 0
+		if b.vel.X > 0 {
+			b.vel.X = 0
 		}
 	}
 
 	// Jump if on ground
 	if ebiten.IsKeyPressed(ebiten.KeySpace) && b.onGround && *score > 0 {
-		*score -= 1
+		*score--
 		b.onGround = false
 		b.jumpVel = b.jumpVel.Mul(b.currPhyState.jumpForce)
 		b.vel = b.vel.Add(b.jumpVel)
@@ -81,17 +77,17 @@ func (b *Ball) Update(score *int, collisionSeg *[]Segment, fraction *[]Vector, g
 	b.radius = b.currPhyState.radius
 
 	// Gravity
-	b.vel.y += b.currPhyState.gravity
+	b.vel.Y += b.currPhyState.gravity
 
 	// limit velocity
-	if b.vel.y > 20 {
-		b.vel.y = 20
+	if b.vel.Y > 20 {
+		b.vel.Y = 20
 	}
-	if b.vel.x > 10 {
-		b.vel.x = 10
+	if b.vel.X > 10 {
+		b.vel.X = 10
 	}
-	if b.vel.x < -10 {
-		b.vel.x = -10
+	if b.vel.X < -10 {
+		b.vel.X = -10
 	}
 
 	// previos position
@@ -99,33 +95,33 @@ func (b *Ball) Update(score *int, collisionSeg *[]Segment, fraction *[]Vector, g
 	b.oldPos = b.pos
 
 	// limit edge X
-	if b.pos.x < 0+b.radius {
-		b.pos.x = b.radius
-		b.vel.x = 1
+	if b.pos.X < 0+b.radius {
+		b.pos.X = b.radius
+		b.vel.X = 1
 	}
-	if b.pos.x < minLeftX+b.radius {
-		b.pos.x = minLeftX + b.radius
-		b.vel.x = 1
-	}
+	// if b.pos.X < minLeftX+b.radius {
+	// 	b.pos.X = minLeftX + b.radius
+	// 	b.vel.X = 1
+	// }
 
-	if b.pos.x > maxLeftX-b.radius {
-		b.pos.x = maxLeftX - b.radius
-		b.vel.x = -1
-	}
+	// if b.pos.X > maxLeftX-b.radius {
+	// 	b.pos.X = maxLeftX - b.radius
+	// 	b.vel.X = -1
+	// }
 
 	// Apply velocity
 	b.pos = b.pos.Add(b.vel)
 
 	// Dampen
-	b.vel.x *= 0.995
-	b.vel.y *= 0.995
+	b.vel.X *= 0.995
+	b.vel.Y *= 0.995
 
-	b.CheckCollisions(collisionSeg, ground, lastX)
+	b.CheckCollisions(score, collisionSeg, ground, lastX)
 
 	return nil
 }
 
-func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []Segment, lastX *float64) {
+func (b *Ball) CheckCollisions(score *int, gameCollSeg *[]Segment, ground []*Segment, lastX *float64) {
 
 	var penetrationSum float64
 	// average normal
@@ -135,15 +131,18 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []Segment, lastX *
 
 	wallThickness := 3.0 // or any thickness you want
 
+	// var savePoint *SavePoint
+
 	for _, seg := range ground {
 		// current position
 		closest := closestPointOnSegment(seg.a, seg.b, b.pos)
 		distVec := b.pos.Sub(closest)
 		dist := distVec.Len()
 
+		// true - collision with segment
 		if dist < b.radius+wallThickness {
 
-			*lastX = seg.a.x
+			*lastX = seg.a.X
 
 			// Push the wheel out of the ground
 			normal := distVec.Normalize()
@@ -151,9 +150,24 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []Segment, lastX *
 			// params
 			seg.closestPoint = closest
 			seg.normal = normal
-			collisionSeg = append(collisionSeg, seg)
+			collisionSeg = append(collisionSeg, *seg)
 			penetration := b.radius + wallThickness - dist
 			penetrationSum += penetration
+
+			// if segment is red then minus score
+			if seg.isRed && *score > 0 {
+				*score--
+			}
+		}
+
+		// check collision with save point
+		if seg.savePoint != nil {
+			if circleToCircle(b.pos, b.radius, seg.savePoint.Position, seg.savePoint.Radius) {
+				b.savePoint = seg.savePoint
+				b.onGround = true
+				seg.savePoint = nil
+				*score += savePointScore
+			}
 		}
 	}
 
@@ -179,6 +193,10 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []Segment, lastX *
 			b.vel = reflected.Mul(b.currPhyState.bounceFactor)
 		}
 
+		if avgPenetration > 10 {
+			b.vel = b.vel.Add(Vector{1, 0})
+		}
+
 		b.onGround = true
 	}
 
@@ -198,6 +216,31 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []Segment, lastX *
 		b.jumpVel = Vector{0, 0}.Add(Vector{0, -0.4})
 	}
 
-	*gameCollSeg = collisionSeg
+	// if savePoint
 
+	// if savePoint != nil {
+	// b.pos = savePoint.position
+	// b.onGround = true
+
+	// b.vel = b.vel.Mul(4)
+	// b.pos = seg.savePoint.position
+	// // b.savePoint = seg.savePoint
+	// b.onGround = true
+	// seg.savePoint = nil
+	// b.vel = b.vel.Sub(Vector{0, -20})
+
+	// }
+
+	*gameCollSeg = collisionSeg
+}
+
+func circleToCircle(posA Vector, rA float64, posB Vector, rB float64) bool {
+	distX := posB.X - posA.X
+	distY := posB.Y - posA.Y
+	distance := math.Sqrt((distX * distX) + (distY * distY))
+
+	if distance <= rA+rB {
+		return true
+	}
+	return false
 }
