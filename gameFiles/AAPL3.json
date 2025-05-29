@@ -1,0 +1,7 @@
+{
+    "name": "apple3",
+    "ticker": "AAPL3",
+    "number": 3,
+    "finished": false,
+    "chartFile": "chart_AAPL3.csv"
+}

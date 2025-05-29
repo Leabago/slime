@@ -21,6 +21,7 @@ func createDirIfNotExist(dirPath string) error {
 }
 
 func main() {
+
 	err := createDirIfNotExist(game.GameFilesDir)
 	if err != nil {
 		panic(err)

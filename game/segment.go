@@ -32,6 +32,10 @@ func (s Segment) MinY() float64 {
 	return math.Min(s.a.Y, s.b.Y)
 }
 
+func (s Segment) MaxY() float64 {
+	return math.Max(s.a.Y, s.b.Y)
+}
+
 func (s Segment) AvrX() float64 {
 	return (s.b.X + s.a.X) / 2
 }

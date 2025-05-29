@@ -3,7 +3,8 @@ package game
 import "math"
 
 type Vector struct {
-	X, Y float64
+	X float64
+	Y float64
 }
 
 func (v Vector) Sub(o Vector) Vector  { return Vector{v.X - o.X, v.Y - o.Y} }

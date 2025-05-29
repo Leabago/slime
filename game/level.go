@@ -6,10 +6,16 @@ import (
 )
 
 type Level struct {
-	Name   string
-	Ticker string
-	Number int
-	Locked bool
+	Name      string     `json:"name"`
+	Ticker    string     `json:"ticker"`
+	Number    int        `json:"number"`
+	Finished  bool       `json:"finished"`
+	SavePoint *SavePoint `json:"savePoint,omitempty"`
+	ChartFile string     `json:"chartFile"`
+	Score     int        `json:"score"`
+	MaxX      float64    `json:"maxX"`
+	// MaxY the graph crosses zero and becomes negative. Keep as negative value
+	MaxY float64 `json:"maxY"`
 }
 
 func saveBinary(data interface{}, filename string) error {
@@ -21,6 +27,10 @@ func saveBinary(data interface{}, filename string) error {
 
 	encoder := gob.NewEncoder(file)
 	return encoder.Encode(data)
+}
+
+func saveLevel(level Level) {
+
 }
 
 func loadBinary(data interface{}, filename string) error {
