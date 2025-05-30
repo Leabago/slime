@@ -2,7 +2,9 @@ package game
 
 import (
 	"encoding/gob"
+	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 type Level struct {
@@ -29,10 +31,6 @@ func saveBinary(data interface{}, filename string) error {
 	return encoder.Encode(data)
 }
 
-func saveLevel(level Level) {
-
-}
-
 func loadBinary(data interface{}, filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -43,4 +41,20 @@ func loadBinary(data interface{}, filename string) error {
 	decoder := gob.NewDecoder(file)
 
 	return decoder.Decode(data)
+}
+
+// saveLevel marshals level to json and save it in file
+func saveLevel(level Level) error {
+	// save level to file
+	levelJson, err := json.Marshal(level)
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(filepath.Join(GameFilesDir, getJsonName(level.Ticker)), levelJson, 644)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

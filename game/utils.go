@@ -156,13 +156,39 @@ func readLevelCSV(filename string) ([]Vector, error) {
 	return points, nil
 }
 
-func getStartPosition(segments []*Segment) Vector {
+// getStartPositionPtr calculate start position
+func getStartPositionPtr(segments []*Segment) Vector {
 	minY := segments[0].MinY() - ballPhysicA.radius
 	avrX := segments[0].AvrX()
 	return Vector{avrX, minY}
 }
-func getStartPosition2(segments []Segment) Vector {
+func getStartPosition(segments []Segment) Vector {
 	minY := segments[0].MinY() - ballPhysicA.radius
 	avrX := segments[0].AvrX()
 	return Vector{avrX, minY}
+}
+
+// resetLevel set level score to 0 and clean savePoint
+func resetLevel(level *Level, game *Game) error {
+	if !level.Finished {
+		game.score += level.Score
+	} else {
+		game.score += level.Score * 2
+	}
+
+	level.Score = 0
+	level.Finished = false
+	level.SavePoint = nil
+
+	// save in files
+	err := saveLevel(*level)
+	if err != nil {
+		return err
+	}
+	err = saveBinary(game.score, filepath.Join(GameFilesDir, scoreFileName))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -29,7 +29,7 @@ func NewBall(spawnPos Vector) *Ball {
 	return ball
 }
 
-func (b *Ball) Update(collisionSeg *[]Segment, fraction *[]Vector, ground []*Segment, lastX *float64, game *Game) error {
+func (b *Ball) Update(collisionSeg *[]Segment, ground []*Segment, lastX *float64, game *Game) error {
 
 	// change state
 	b.currPhyState = &ballPhysicA
@@ -67,7 +67,8 @@ func (b *Ball) Update(collisionSeg *[]Segment, fraction *[]Vector, ground []*Seg
 		b.vel = b.vel.Add(b.jumpVel)
 
 		for _, seg := range *collisionSeg {
-			*fraction = append(*fraction, seg.closestPoint)
+			game.fractions = append(game.fractions, seg.closestPoint)
+			// *fraction = append(*fraction, seg.closestPoint)
 		}
 	}
 
@@ -137,10 +138,10 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment, lastX 
 			if isCircleRectangleColl(game.getCurrentLevel().SavePoint.Position, b.radius, *game.borderSquare) {
 				b.pos = game.getCurrentLevel().SavePoint.Position
 			} else {
-				b.pos = getStartPosition(ground)
+				b.pos = getStartPositionPtr(ground)
 			}
 		} else {
-			b.pos = getStartPosition(ground)
+			b.pos = getStartPositionPtr(ground)
 		}
 	}
 
@@ -178,9 +179,11 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment, lastX 
 				seg.savePoint = nil
 
 				game.score += savePointScore
+				game.getCurrentLevel().Score += savePointScore
 
 				// collision with finish
 				if game.getCurrentLevel().SavePoint.IsFinish {
+					game.getCurrentLevel().Score += savePointScore * 5
 					game.score += savePointScore * 5
 					game.getCurrentLevel().Finished = true
 				}

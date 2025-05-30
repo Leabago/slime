@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
-	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -28,11 +27,11 @@ const (
 	multiplyChartX = 50
 	multiplyChartY = -100
 	// groundBuffSize - buffer consist of two slices of ground, groundBuffSize is size of one slice
-	groundBuffSize = 5
-	// savePointSpawn - how often save points are spawn
+	groundBuffSize = 10
+	// savePointSpawn - how often save points spawns
 	savePointSpawn = 10
 	// savePointScore - add points after collision with save point
-	savePointScore = 20.0
+	savePointScore = 40
 	// GameFilesDir - files related with game and levels
 	GameFilesDir = "gameFiles"
 	// scoreFileName - file with user score
@@ -40,8 +39,20 @@ const (
 	// defaultScore - score at first start
 	defaultScore = 10000
 	// max wall height
-	wallHeight = 200.0
+	wallHeight = 2000.0
+	// redSegmentSpawn how often red segment spawns
+	redSegmentSpawn = 5
 )
+
+// Draw variables
+var wallColor = color.RGBA{255, 0, 0, 255}
+var segmentWidth float32 = 5
+var redColor = color.RGBA{255, 0, 0, 255}
+var groundColor = color.RGBA{50, 255, 50, 255}
+var ballColor = color.RGBA{50, 255, 50, 255}
+var collSegColor = color.RGBA{1, 1, 1, 255}
+var fractionsRadius = 5
+var fractionsColor = color.RGBA{100, 100, 0, 255}
 
 // Game states
 const (
@@ -83,9 +94,17 @@ type Game struct {
 
 	// wall
 	borderSquare *BorderSquare
+
+	drawError error
 }
 
 func (g *Game) Update() error {
+	//  return error from Draw()
+	if g.drawError != nil {
+		fmt.Println("g.drawError ", g.drawError)
+		return g.drawError
+	}
+
 	var err error
 	switch g.currentState {
 	case StateMenu:
@@ -113,7 +132,7 @@ func (g *Game) Update() error {
 			}
 
 			// save level to file
-			g.saveLevel()
+			g.saveCurrentLevel()
 		}
 		// game logic here
 
@@ -122,7 +141,9 @@ func (g *Game) Update() error {
 		if g.frameTimer.IsReady() {
 			g.frameTimer.Reset()
 
-			if len(g.fractions) > 0 {
+			if len(g.fractions) > 20 {
+				g.fractions = g.fractions[20:len(g.fractions)]
+			} else if len(g.fractions) > 0 {
 				g.fractions = g.fractions[1:len(g.fractions)]
 			}
 		}
@@ -137,7 +158,7 @@ func (g *Game) Update() error {
 		lastXbuff := groundFromBuff[len(groundFromBuff)-1].b.X
 
 		minY, maxY := findMinMaxY(groundFromBuff)
-		borderSquare := newBorderSquare(groundFromBuff[0].a.X, groundFromBuff[len(groundFromBuff)-1].b.X, minY-wallHeight, maxY)
+		borderSquare := newBorderSquare(groundFromBuff, minY-wallHeight, maxY)
 		g.borderSquare = &borderSquare
 		groundFromBuff = append(groundFromBuff, &borderSquare.left)
 		groundFromBuff = append(groundFromBuff, &borderSquare.right)
@@ -146,7 +167,7 @@ func (g *Game) Update() error {
 
 		lastXcollision := 0.0
 
-		err := g.ball.Update(&g.collisionSeg, &g.fractions, groundFromBuff, &lastXcollision, g)
+		err := g.ball.Update(&g.collisionSeg, groundFromBuff, &lastXcollision, g)
 		if err != nil {
 			return err
 		}
@@ -154,14 +175,11 @@ func (g *Game) Update() error {
 		if g.getCurrentLevel().Finished {
 			fmt.Println("win level")
 			g.currentState = StateLevelSelect
-			g.saveLevel()
+			g.saveCurrentLevel()
 			return nil
 		}
 
 		// update groundBuff if next chunk
-		// if lastXcollision >= g.groundBuff[1][0].b.X && g.getCurrentLevel().MaxX > lastXbuff && g.groundBuff[1][0].b.X < g.ball.pos.X-(g.ball.radius*2) {
-		// 	secondBuffI := int(lastXbuff) / multiplyChartX
-
 		if g.ball.pos.X > middleSegment.b.X && lenBuff >= groundBuffSize*2 {
 			// Swap buffers
 			g.groundBuff[0], g.groundBuff[1] = g.groundBuff[1], g.groundBuff[0]
@@ -184,10 +202,9 @@ func (g *Game) Update() error {
 	return err
 }
 
-// saveLevel marshals level to json and save it in file
-func (g *Game) saveLevel() error {
+// saveCurrentLevel marshals level to json and save it in file
+func (g *Game) saveCurrentLevel() error {
 	// save level to file
-
 	level := g.getCurrentLevel()
 
 	levelJson, err := json.Marshal(level)
@@ -226,7 +243,7 @@ func (g *Game) uploadLevel() error {
 	if g.getCurrentLevel().MaxX == 0 {
 		g.getCurrentLevel().MaxX = maxX
 		g.getCurrentLevel().MaxY = maxY
-		err = g.saveLevel()
+		err = g.saveCurrentLevel()
 		if err != nil {
 			return err
 		}
@@ -255,7 +272,7 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 			}
 		}
 
-		if i%3 == 0 {
+		if i%redSegmentSpawn == 0 && i > 10 {
 			seg.isRed = true
 		}
 
@@ -291,7 +308,7 @@ func (g *Game) initializeLevelState(segments []Segment, lastX float64) error {
 	// if the level was launched for the first time
 	if savePoint == nil {
 		savePoint = &SavePoint{}
-		savePoint.Position = getStartPosition2(segments)
+		savePoint.Position = getStartPosition(segments)
 
 		g.groundBuff = [2][]*Segment{
 			makeSegments(segments[:groundBuffSize]),
@@ -318,27 +335,6 @@ func (g *Game) initializeLevelState(segments []Segment, lastX float64) error {
 			makeSegments(segments[groundIndex+safeLeftSize : groundIndex+safeLeftSize+safeRightSize]),
 		}
 
-		// if safeLeftSize < groundBuffSize {
-		// 	g.groundBuff = [2][]*Segment{
-		// 		makeSegments(segments[groundIndex : groundIndex+safeLeftSize]),
-		// 		makeSegments(segments[groundIndex : groundIndex+safeLeftSize]),
-		// 	}
-		// } else {
-
-		// 	copySize := min(groundBuffSize, len(g.ground)-(groundIndex+groundBuffSize))
-
-		// 	g.groundBuff = [2][]*Segment{
-		// 		makeSegments(segments[groundIndex : groundIndex+groundBuffSize]),
-		// 		makeSegments(segments[groundIndex+copySize : groundIndex+groundBuffSize+copySize]),
-		// 	}
-		// }
-		// else {
-		// 	g.groundBuff = [2][]*Segment{
-		// 		makeSegments(segments[groundIndex : groundIndex+groundBuffSize]),
-		// 		makeSegments(segments[groundIndex+groundBuffSize : groundIndex+groundBuffSize*2]),
-		// 	}
-		// }
-
 		// delete savePoint from spawn
 		segments[groundIndex].savePoint = nil
 	}
@@ -359,99 +355,100 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	case StateLoadingLevel:
 		// draw loading
 	case StatePlaying:
-		screen.Fill(color.RGBA{220, 220, 255, 255})
+		g.drawPlaying(screen)
+	}
+}
 
-		// Draw wall
-		// wallLeftX := g.groundBuff[0][0].a
-		// wallRightX := g.groundBuff[1][len(g.groundBuff[1])-1].b
-		wallColor := color.RGBA{255, 0, 0, 255}
+func (g *Game) drawPlaying(screen *ebiten.Image) {
+	screen.Fill(color.RGBA{220, 220, 255, 255})
 
-		// borderSquare
-		borderSquare := g.borderSquare
-		if borderSquare != nil {
-			ebitenutil.DrawLine(screen, g.borderSquare.top.a.X-g.camera.X, g.borderSquare.top.a.Y-g.camera.Y, g.borderSquare.top.b.X-g.camera.X, g.borderSquare.top.b.Y-g.camera.Y, wallColor)
-			ebitenutil.DrawLine(screen, g.borderSquare.right.a.X-g.camera.X, g.borderSquare.right.a.Y-g.camera.Y, g.borderSquare.right.b.X-g.camera.X, g.borderSquare.right.b.Y-g.camera.Y, wallColor)
-			ebitenutil.DrawLine(screen, g.borderSquare.bottom.a.X-g.camera.X, g.borderSquare.bottom.a.Y-g.camera.Y, g.borderSquare.bottom.b.X-g.camera.X, g.borderSquare.bottom.b.Y-g.camera.Y, wallColor)
-			ebitenutil.DrawLine(screen, g.borderSquare.left.a.X-g.camera.X, g.borderSquare.left.a.Y-g.camera.Y, g.borderSquare.left.b.X-g.camera.X, g.borderSquare.left.b.Y-g.camera.Y, wallColor)
-		}
-
-		// Draw ground
-		for _, seg := range g.ground {
-			ebitenutil.DrawLine(screen, seg.a.X-g.camera.X, seg.a.Y-g.camera.Y, seg.b.X-g.camera.X, seg.b.Y-g.camera.Y, color.RGBA{100, 200, 100, 255})
-
-		}
-
-		for _, seg := range g.groundBuff[0] {
-			// ebitenutil.DrawLine(screen, seg.a.X-g.camera.X, seg.a.Y-g.camera.Y-5, seg.b.X-g.camera.X, seg.b.Y-g.camera.Y-5, color.RGBA{255, 200, 100, 255})
-
-			if seg.savePoint != nil {
-				ebitenutil.DrawCircle(screen, seg.savePoint.Position.X-g.camera.X, seg.savePoint.Position.Y-g.camera.Y, seg.savePoint.Radius, color.Black)
-			}
-
-			if seg.isRed {
-				vector.StrokeLine(screen, float32(seg.a.X-g.camera.X), float32(seg.a.Y-g.camera.Y-5), float32(seg.b.X-g.camera.X), float32(seg.b.Y-g.camera.Y-5), 1, color.RGBA{255, 0, 0, 255}, false)
-			} else {
-				vector.StrokeLine(screen, float32(seg.a.X-g.camera.X), float32(seg.a.Y-g.camera.Y-5), float32(seg.b.X-g.camera.X), float32(seg.b.Y-g.camera.Y-5), 1, color.RGBA{255, 200, 100, 255}, false)
-			}
-		}
-
-		for _, seg := range g.groundBuff[1] {
-			if seg.isRed {
-				vector.StrokeLine(screen, float32(seg.a.X-g.camera.X), float32(seg.a.Y-g.camera.Y+5), float32(seg.b.X-g.camera.X), float32(seg.b.Y-g.camera.Y+5), 5, color.RGBA{255, 0, 0, 255}, false)
-			} else {
-				vector.StrokeLine(screen, float32(seg.a.X-g.camera.X), float32(seg.a.Y-g.camera.Y+5), float32(seg.b.X-g.camera.X), float32(seg.b.Y-g.camera.Y+5), 5, color.RGBA{0, 100, 200, 255}, false)
-			}
-			if seg.savePoint != nil {
-				ebitenutil.DrawCircle(screen, seg.savePoint.Position.X-g.camera.X, seg.savePoint.Position.Y-g.camera.Y, seg.savePoint.Radius, color.Black)
-			}
-		}
-
-		for _, seg := range g.gameParallelSeg {
-			ebitenutil.DrawLine(screen, seg.a.X-g.camera.X, seg.a.Y-g.camera.Y, seg.b.X-g.camera.X, seg.b.Y-g.camera.Y, color.RGBA{100, 100, 255, 255})
-		}
-
-		// Draw wheel
-		w := g.ball
-
-		if w.facingRight {
-			ebitenutil.DrawCircle(screen, w.pos.X-g.camera.X, w.pos.Y-g.camera.Y, w.radius, color.Black)
-
-		} else {
-			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Scale(-1, 1)
-			op.GeoM.Translate(w.pos.X-g.camera.X, w.pos.Y-g.camera.Y)
-			ebitenutil.DrawCircle(screen, w.pos.X-g.camera.X, w.pos.Y-g.camera.Y, w.radius, color.Black)
-		}
-
-		// Show direction line
-		dirX := w.pos.X + w.radius*math.Cos(0)
-		dirY := w.pos.Y + w.radius*math.Sin(0)
-		ebitenutil.DrawLine(screen, w.pos.X-g.camera.X, w.pos.Y-g.camera.Y, dirX-g.camera.X, dirY-g.camera.Y, color.RGBA{255, 0, 0, 255})
-
-		// Draw ground
-		for _, seg := range g.collisionSeg {
-			// r := uint8(rand.Intn(255))
-			// g := uint8(rand.Intn(255))
-			// b := uint8(rand.Intn(255))
-			// ebitenutil.DrawLine(screen, seg.a.x, seg.a.y, seg.b.x, seg.b.y, color.RGBA{r, g, b, 50})
-
-			ebitenutil.DrawLine(screen, seg.a.X-g.camera.X, seg.a.Y-g.camera.Y, seg.b.X-g.camera.X, seg.b.Y-g.camera.Y, color.RGBA{1, 1, 1, 255})
-
-			ebitenutil.DrawCircle(screen, seg.closestPoint.X-g.camera.X, seg.closestPoint.Y-g.camera.Y, 5, color.RGBA{255, 0, 0, 255})
-
-			ebitenutil.DrawCircle(screen, seg.closestPoint.X-g.camera.X, seg.closestPoint.Y-g.camera.Y, 5, color.RGBA{255, 0, 0, 255})
-
-		}
-
-		for _, fr := range g.fractions {
-			ebitenutil.DrawCircle(screen, fr.X-g.camera.X, fr.Y-g.camera.Y, 5, color.RGBA{100, 100, 0, 255})
-		}
-
-		ebitenutil.DebugPrintAt(screen, "isOnGround:"+strconv.Itoa(g.score), 10, 45)
-
-		// g.drawGame(screen)
+	// Draw borderSquare
+	borderSquare := g.borderSquare
+	if borderSquare != nil {
+		vector.StrokeLine(screen,
+			float32(g.borderSquare.top.a.X-g.camera.X),
+			float32(g.borderSquare.top.a.Y-g.camera.Y),
+			float32(g.borderSquare.top.b.X-g.camera.X),
+			float32(g.borderSquare.top.b.Y-g.camera.Y),
+			segmentWidth/2, wallColor, false)
+		vector.StrokeLine(screen,
+			float32(g.borderSquare.drawRight.a.X-g.camera.X),
+			float32(g.borderSquare.drawRight.a.Y-g.camera.Y),
+			float32(g.borderSquare.drawRight.b.X-g.camera.X),
+			float32(g.borderSquare.drawRight.b.Y-g.camera.Y),
+			segmentWidth/2, wallColor, false)
+		// ebitenutil.DrawLine(screen, g.borderSquare.bottom.a.X-g.camera.X, g.borderSquare.bottom.a.Y-g.camera.Y, g.borderSquare.bottom.b.X-g.camera.X, g.borderSquare.bottom.b.Y-g.camera.Y, wallColor)
+		vector.StrokeLine(screen,
+			float32(g.borderSquare.drawLeft.a.X-g.camera.X),
+			float32(g.borderSquare.drawLeft.a.Y-g.camera.Y),
+			float32(g.borderSquare.drawLeft.b.X-g.camera.X),
+			float32(g.borderSquare.drawLeft.b.Y-g.camera.Y),
+			segmentWidth/2, wallColor, false)
 	}
 
+	// Draw ground
+	// for _, seg := range g.ground {
+	// 	ebitenutil.DrawLine(screen, seg.a.X-g.camera.X, seg.a.Y-g.camera.Y, seg.b.X-g.camera.X, seg.b.Y-g.camera.Y, color.RGBA{100, 200, 100, 255})
+	// }
+
+	drawGround(screen, g.groundBuff[0], g.camera)
+	drawGround(screen, g.groundBuff[1], g.camera)
+
+	// Draw wheel
+	vector.DrawFilledCircle(
+		screen,
+		float32(g.ball.pos.X-g.camera.X),
+		float32(g.ball.pos.Y-g.camera.Y),
+		float32(g.ball.radius), ballColor, false)
+
+	// Draw collisions
+	// for _, seg := range g.collisionSeg {
+	// 	vector.StrokeLine(screen,
+	// 		float32(seg.a.X-g.camera.X),
+	// 		float32(seg.a.Y-g.camera.Y+5),
+	// 		float32(seg.b.X-g.camera.X),
+	// 		float32(seg.b.Y-g.camera.Y+5),
+	// 		segmentWidth/2, collSegColor, false)
+
+	// 	vector.DrawFilledCircle(screen,
+	// 		float32(seg.closestPoint.X-g.camera.X),
+	// 		float32(seg.closestPoint.Y-g.camera.Y),
+	// 		float32(fractionsRadius), fractionsColor, false)
+
+	// }
+
+	for _, fr := range g.fractions {
+		vector.DrawFilledCircle(screen,
+			float32(fr.X-g.camera.X),
+			float32(fr.Y-g.camera.Y),
+			float32(fractionsRadius), fractionsColor, false)
+	}
+
+	ebitenutil.DebugPrintAt(screen, "isOnGround:"+strconv.Itoa(g.score), 10, 45)
+}
+
+func drawGround(screen *ebiten.Image, ground []*Segment, camera *Camera) {
+	for _, seg := range ground {
+		if seg.savePoint != nil {
+			vector.DrawFilledCircle(screen,
+				float32(seg.savePoint.Position.X-camera.X),
+				float32(seg.savePoint.Position.Y-camera.Y),
+				float32(seg.savePoint.Radius),
+				color.Black, false)
+		}
+
+		color := groundColor
+		if seg.isRed {
+			color = redColor
+		}
+
+		vector.StrokeLine(screen,
+			float32(seg.a.X-camera.X),
+			float32(seg.a.Y-camera.Y),
+			float32(seg.b.X-camera.X),
+			float32(seg.b.Y-camera.Y),
+			segmentWidth, color, false)
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -589,9 +586,10 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 
 	// Draw levels
 	levelButtons := make([]Button, len(g.levels))
+	sellLevel := make([]Button, len(g.levels))
 	for i, level := range g.levels {
 		levelButtons[i] = Button{
-			X: 200, Y: 150 + float64(i)*80, Width: 400, Height: 60,
+			X: 200, Y: 150 + float64(i)*80, Width: 200, Height: 60,
 			Text:       level.Name,
 			Color:      color.RGBA{R: 70, G: 70, B: 180, A: 255},
 			HoverColor: color.RGBA{R: 100, G: 100, B: 220, A: 255},
@@ -605,10 +603,29 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 			}(i),
 		}
 
+		sellLevel[i] = Button{
+			X: levelButtons[i].X + levelButtons[i].Width, Y: 150 + float64(i)*80, Width: 50, Height: 60,
+			Text:       "sell",
+			Color:      color.RGBA{R: 70, G: 70, B: 180, A: 255},
+			HoverColor: color.RGBA{R: 100, G: 100, B: 220, A: 255},
+			Action: func(lvlIdx int) func() {
+				return func() {
+					err := resetLevel(g.levels[lvlIdx], g)
+					g.drawError = err
+				}
+			}(i),
+		}
+
 		// Draw level button
 		g.drawButton(screen, &levelButtons[i])
 		if levelButtons[i].IsClicked() {
 			levelButtons[i].Action()
+		}
+
+		// Draw sell level
+		g.drawButton(screen, &sellLevel[i])
+		if sellLevel[i].IsClicked() {
+			sellLevel[i].Action()
 		}
 
 		// Draw level info (number and score)
