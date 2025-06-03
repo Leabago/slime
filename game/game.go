@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/color"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,14 +25,16 @@ const (
 	ScreenWidth  = 1300
 	ScreenHeight = 800
 	// expand chart by x and y
-	multiplyChartX = 50
-	multiplyChartY = -100
+	// multiplyChartX = 50
+	// multiplyChartY = -20
+	multiplyChartX = 10
+	multiplyChartY = -50
 	// groundBuffSize - buffer consist of two slices of ground, groundBuffSize is size of one slice
-	groundBuffSize = 10
+	groundBuffSize = 100
 	// savePointSpawn - how often save points spawns
 	savePointSpawn = 10
 	// savePointScore - add points after collision with save point
-	savePointScore = 40
+	savePointScore = 30
 	// GameFilesDir - files related with game and levels
 	GameFilesDir = "gameFiles"
 	// scoreFileName - file with user score
@@ -42,17 +45,30 @@ const (
 	wallHeight = 2000.0
 	// redSegmentSpawn how often red segment spawns
 	redSegmentSpawn = 5
+
+	// levelFirstScore first score at start level
+	levelFirstScore = 0
+
+	// movingWall speed
+	movWallSpeedHight = 10
+	movWallSpeedSlow  = 3
 )
 
 // Draw variables
-var wallColor = color.RGBA{255, 0, 0, 255}
+var playBackground = color.RGBA{0, 0, 0, 255}
+var wallColor = color.RGBA{200, 10, 60, 255}
+var savePointColor = color.RGBA{130, 255, 130, 255}
+var groundColor = color.RGBA{10, 60, 60, 255}
+var groundColorHover = color.RGBA{30, 90, 90, 255}
+var ballColor = color.RGBA{70, 150, 70, 255}
+var ballColorBig = color.RGBA{90, 180, 90, 200}
+
+// var collSegColor = color.RGBA{1, 1, 1, 255}
+// var fractionsColor = color.RGBA{100, 100, 0, 255}
+// var redColor = color.RGBA{255, 0, 0, 255}
+
 var segmentWidth float32 = 5
-var redColor = color.RGBA{255, 0, 0, 255}
-var groundColor = color.RGBA{50, 255, 50, 255}
-var ballColor = color.RGBA{50, 255, 50, 255}
-var collSegColor = color.RGBA{1, 1, 1, 255}
-var fractionsRadius = 5
-var fractionsColor = color.RGBA{100, 100, 0, 255}
+var fractionsRadius = 10
 
 // Game states
 const (
@@ -94,6 +110,7 @@ type Game struct {
 
 	// wall
 	borderSquare *BorderSquare
+	movingWall   *Segment
 
 	drawError error
 }
@@ -146,7 +163,23 @@ func (g *Game) Update() error {
 			} else if len(g.fractions) > 0 {
 				g.fractions = g.fractions[1:len(g.fractions)]
 			}
+
 		}
+
+		distanceWallBall := math.Abs(g.ball.pos.X - g.movingWall.A.X)
+
+		if distanceWallBall > ScreenWidth {
+			g.movingWall.A.X += movWallSpeedHight
+			g.movingWall.B.X += movWallSpeedHight
+		} else if g.groundBuff[0][0].A.X != 0 {
+			g.movingWall.A.X += movWallSpeedSlow
+			g.movingWall.B.X += movWallSpeedSlow
+		}
+
+		// if !(g.getCurrentLevel().SavePoint == nil) {
+		// 	g.movingWall.A.X += 2
+		// 	g.movingWall.B.X += 2
+		// }
 
 		// fill unite slice from g.groundBuff[0] and g.groundBuff[1]
 		groundFromBuff := make([]*Segment, 0, len(g.groundBuff[0])+len(g.groundBuff[1]))
@@ -154,8 +187,8 @@ func (g *Game) Update() error {
 		groundFromBuff = append(groundFromBuff, g.groundBuff[1]...)
 
 		lenBuff := len(groundFromBuff)
-		middleSegment := groundFromBuff[len(groundFromBuff)/2]
-		lastXbuff := groundFromBuff[len(groundFromBuff)-1].b.X
+		middleSegment := groundFromBuff[int(float64(len(groundFromBuff))/1.5)]
+		lastXbuff := groundFromBuff[len(groundFromBuff)-1].B.X
 
 		minY, maxY := findMinMaxY(groundFromBuff)
 		borderSquare := newBorderSquare(groundFromBuff, minY-wallHeight, maxY)
@@ -164,6 +197,7 @@ func (g *Game) Update() error {
 		groundFromBuff = append(groundFromBuff, &borderSquare.right)
 		groundFromBuff = append(groundFromBuff, &borderSquare.top)
 		groundFromBuff = append(groundFromBuff, &borderSquare.bottom)
+		groundFromBuff = append(groundFromBuff, g.movingWall)
 
 		lastXcollision := 0.0
 
@@ -180,7 +214,7 @@ func (g *Game) Update() error {
 		}
 
 		// update groundBuff if next chunk
-		if g.ball.pos.X > middleSegment.b.X && lenBuff >= groundBuffSize*2 {
+		if g.ball.pos.X > middleSegment.B.X && lenBuff >= groundBuffSize*2 {
 			// Swap buffers
 			g.groundBuff[0], g.groundBuff[1] = g.groundBuff[1], g.groundBuff[0]
 
@@ -192,6 +226,12 @@ func (g *Game) Update() error {
 			g.groundBuff[1] = make([]*Segment, copySize)
 			for i := 0; i < copySize; i++ {
 				g.groundBuff[1][i] = &g.ground[secondBuffI+i]
+			}
+
+			// update wall
+			if g.movingWall.A.X > g.ball.pos.X {
+				g.movingWall.A.X = g.groundBuff[0][0].A.X
+				g.movingWall.B.X = g.groundBuff[0][0].A.X
 			}
 		}
 
@@ -206,6 +246,7 @@ func (g *Game) Update() error {
 func (g *Game) saveCurrentLevel() error {
 	// save level to file
 	level := g.getCurrentLevel()
+	level.MovingWall = g.movingWall
 
 	levelJson, err := json.Marshal(level)
 	if err != nil {
@@ -235,11 +276,12 @@ func (g *Game) uploadLevel() error {
 		return fmt.Errorf("too small points for level")
 	}
 	// Initialize game state
-	err = g.initializeLevelState(segments, maxX)
+	err = g.initializeLevelState(segments, maxX, maxY)
 	if err != nil {
 		return err
 	}
 
+	// add maxX maxY to file if 0
 	if g.getCurrentLevel().MaxX == 0 {
 		g.getCurrentLevel().MaxX = maxX
 		g.getCurrentLevel().MaxY = maxY
@@ -258,8 +300,8 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 
 	for i := 0; i < len(segments); i++ {
 		seg := Segment{
-			a: points[i],
-			b: points[i+1],
+			A: points[i],
+			B: points[i+1],
 		}
 
 		if i%savePointSpawn == 0 {
@@ -286,7 +328,7 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 	// create last save point
 	segments[len(segments)-1].savePoint = &SavePoint{
 		Position: Vector{
-			X: segments[len(segments)-1].a.X,
+			X: segments[len(segments)-1].A.X,
 			Y: segments[len(segments)-1].MinY() - 100,
 		},
 
@@ -294,16 +336,17 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 		Radius:   40,
 	}
 
-	return segments, points[len(points)-1].X, maxY
+	return segments, segments[len(segments)-1].B.X, maxY
 }
 
-func (g *Game) initializeLevelState(segments []Segment, lastX float64) error {
+func (g *Game) initializeLevelState(segments []Segment, lastX, maxY float64) error {
 	g.ground = segments
 
 	// get spawn position
 	savePoint := g.getCurrentLevel().SavePoint
 
-	fmt.Println("savePoint: ", savePoint)
+	fmt.Println("-----------------------------:")
+	fmt.Println("savePoint:", savePoint)
 
 	// if the level was launched for the first time
 	if savePoint == nil {
@@ -314,9 +357,17 @@ func (g *Game) initializeLevelState(segments []Segment, lastX float64) error {
 			makeSegments(segments[:groundBuffSize]),
 			makeSegments(segments[groundBuffSize : groundBuffSize*2]),
 		}
+
+		// set moving wall
+		g.movingWall = &Segment{
+			A:            Vector{0, 0},
+			B:            Vector{0, maxY - wallHeight},
+			isMovingWall: true,
+		}
 	} else {
-		groundIndex := int(savePoint.Position.X) / multiplyChartX
-		groundIndex -= groundBuffSize
+		savePointIndex := int(savePoint.Position.X) / multiplyChartX
+		groundIndex := savePointIndex - groundBuffSize
+
 		if groundIndex < 0 {
 			groundIndex = 0
 		}
@@ -329,14 +380,24 @@ func (g *Game) initializeLevelState(segments []Segment, lastX float64) error {
 		}
 
 		// if save point at the end of the chart
-
 		g.groundBuff = [2][]*Segment{
 			makeSegments(segments[groundIndex : groundIndex+safeLeftSize]),
 			makeSegments(segments[groundIndex+safeLeftSize : groundIndex+safeLeftSize+safeRightSize]),
 		}
 
 		// delete savePoint from spawn
-		segments[groundIndex].savePoint = nil
+		segments[savePointIndex].savePoint = nil
+
+		if g.getCurrentLevel().MovingWall != nil {
+			g.movingWall = g.getCurrentLevel().MovingWall
+		}
+		if g.movingWall.A.X > savePoint.Position.X || g.movingWall.B.X > savePoint.Position.X || g.movingWall.B.Y > maxY-wallHeight {
+			g.movingWall = &Segment{
+				A:            Vector{g.groundBuff[0][0].A.X, 0},
+				B:            Vector{g.groundBuff[0][0].A.X, maxY - wallHeight},
+				isMovingWall: true,
+			}
+		}
 	}
 
 	g.ball = NewBall(savePoint.Position)
@@ -360,31 +421,39 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) drawPlaying(screen *ebiten.Image) {
-	screen.Fill(color.RGBA{220, 220, 255, 255})
+	screen.Fill(playBackground)
 
 	// Draw borderSquare
 	borderSquare := g.borderSquare
 	if borderSquare != nil {
 		vector.StrokeLine(screen,
-			float32(g.borderSquare.top.a.X-g.camera.X),
-			float32(g.borderSquare.top.a.Y-g.camera.Y),
-			float32(g.borderSquare.top.b.X-g.camera.X),
-			float32(g.borderSquare.top.b.Y-g.camera.Y),
-			segmentWidth/2, wallColor, false)
+			float32(g.borderSquare.top.A.X-g.camera.X),
+			float32(g.borderSquare.top.A.Y-g.camera.Y),
+			float32(g.borderSquare.top.B.X-g.camera.X),
+			float32(g.borderSquare.top.B.Y-g.camera.Y),
+			segmentWidth, wallColor, false)
 		vector.StrokeLine(screen,
-			float32(g.borderSquare.drawRight.a.X-g.camera.X),
-			float32(g.borderSquare.drawRight.a.Y-g.camera.Y),
-			float32(g.borderSquare.drawRight.b.X-g.camera.X),
-			float32(g.borderSquare.drawRight.b.Y-g.camera.Y),
-			segmentWidth/2, wallColor, false)
+			float32(g.borderSquare.drawRight.A.X-g.camera.X),
+			float32(g.borderSquare.drawRight.A.Y-g.camera.Y),
+			float32(g.borderSquare.drawRight.B.X-g.camera.X),
+			float32(g.borderSquare.drawRight.B.Y-g.camera.Y),
+			segmentWidth, wallColor, false)
 		// ebitenutil.DrawLine(screen, g.borderSquare.bottom.a.X-g.camera.X, g.borderSquare.bottom.a.Y-g.camera.Y, g.borderSquare.bottom.b.X-g.camera.X, g.borderSquare.bottom.b.Y-g.camera.Y, wallColor)
 		vector.StrokeLine(screen,
-			float32(g.borderSquare.drawLeft.a.X-g.camera.X),
-			float32(g.borderSquare.drawLeft.a.Y-g.camera.Y),
-			float32(g.borderSquare.drawLeft.b.X-g.camera.X),
-			float32(g.borderSquare.drawLeft.b.Y-g.camera.Y),
-			segmentWidth/2, wallColor, false)
+			float32(g.borderSquare.drawLeft.A.X-g.camera.X),
+			float32(g.borderSquare.drawLeft.A.Y-g.camera.Y),
+			float32(g.borderSquare.drawLeft.B.X-g.camera.X),
+			float32(g.borderSquare.drawLeft.B.Y-g.camera.Y),
+			segmentWidth, wallColor, false)
 	}
+
+	// Draw  moving Wall
+	vector.StrokeLine(screen,
+		float32(g.movingWall.A.X-g.camera.X),
+		float32(g.movingWall.A.Y-g.camera.Y),
+		float32(g.movingWall.B.X-g.camera.X),
+		float32(g.movingWall.B.Y-g.camera.Y),
+		segmentWidth, wallColor, false)
 
 	// Draw ground
 	// for _, seg := range g.ground {
@@ -394,7 +463,11 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 	drawGround(screen, g.groundBuff[0], g.camera)
 	drawGround(screen, g.groundBuff[1], g.camera)
 
-	// Draw wheel
+	// Draw ball
+	ballColor := ballColor
+	if g.ball.currPhyState.state == phyStateB {
+		ballColor = ballColorBig
+	}
 	vector.DrawFilledCircle(
 		screen,
 		float32(g.ball.pos.X-g.camera.X),
@@ -421,10 +494,13 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 		vector.DrawFilledCircle(screen,
 			float32(fr.X-g.camera.X),
 			float32(fr.Y-g.camera.Y),
-			float32(fractionsRadius), fractionsColor, false)
+			float32(fractionsRadius), ballColor, false)
 	}
 
-	ebitenutil.DebugPrintAt(screen, "isOnGround:"+strconv.Itoa(g.score), 10, 45)
+	// ebitenutil.DebugPrintAt(screen, "isOnGround:"+strconv.Itoa(g.score), 10, 45)
+	// Draw score
+	text.Draw(screen, fmt.Sprintf("Score: %d$", g.score), g.titleFont, 10, 50, color.White)
+	text.Draw(screen, fmt.Sprintf("Level score: %d$", g.getCurrentLevel().Score), g.buttonFont, 10, 100, color.White)
 }
 
 func drawGround(screen *ebiten.Image, ground []*Segment, camera *Camera) {
@@ -434,19 +510,26 @@ func drawGround(screen *ebiten.Image, ground []*Segment, camera *Camera) {
 				float32(seg.savePoint.Position.X-camera.X),
 				float32(seg.savePoint.Position.Y-camera.Y),
 				float32(seg.savePoint.Radius),
-				color.Black, false)
+				savePointColor, false)
+			if seg.savePoint.IsFinish {
+				vector.DrawFilledCircle(screen,
+					float32(seg.savePoint.Position.X-camera.X),
+					float32(seg.savePoint.Position.Y-camera.Y),
+					float32(seg.savePoint.Radius*0.7),
+					color.Black, false)
+			}
 		}
 
 		color := groundColor
 		if seg.isRed {
-			color = redColor
+			color = wallColor
 		}
 
 		vector.StrokeLine(screen,
-			float32(seg.a.X-camera.X),
-			float32(seg.a.Y-camera.Y),
-			float32(seg.b.X-camera.X),
-			float32(seg.b.Y-camera.Y),
+			float32(seg.A.X-camera.X),
+			float32(seg.A.Y-camera.Y),
+			float32(seg.B.X-camera.X),
+			float32(seg.B.Y-camera.Y),
 			segmentWidth, color, false)
 	}
 }
@@ -476,7 +559,7 @@ func NewGame() (*Game, error) {
 
 	// Create menu background
 	menuBg := ebiten.NewImage(ScreenWidth, ScreenHeight)
-	menuBg.Fill(color.RGBA{R: 230, G: 230, B: 230, A: 230})
+	menuBg.Fill(playBackground)
 
 	dirEntry, err := os.ReadDir(GameFilesDir)
 	if err != nil {
@@ -540,14 +623,14 @@ func (g *Game) drawMenu(screen *ebiten.Image) {
 	bounds := text.BoundString(g.titleFont, title)
 	text.Draw(screen, title, g.titleFont,
 		(ScreenWidth-bounds.Dx())/2, 150,
-		color.Black)
+		color.White)
 
 	// Create and draw buttons
 	buttons := []Button{
 		{
 			X: ScreenWidth/2 - 200, Y: 200, Width: 400, Height: 60,
-			Text: "PLAY", Color: color.RGBA{R: 80, G: 200, B: 100, A: 255},
-			HoverColor: color.RGBA{R: 100, G: 220, B: 110, A: 255},
+			Text: "PLAY", Color: ballColor,
+			HoverColor: ballColorBig,
 			Action:     func() { g.currentState = StateLevelSelect },
 		},
 		{
@@ -575,24 +658,30 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 	bounds := text.BoundString(g.titleFont, title)
 	text.Draw(screen, title, g.titleFont,
 		(ScreenWidth-bounds.Dx())/2, 80,
-		color.Black)
+		color.White)
 
 	// Draw score
-	score := fmt.Sprintf("You current score is %s $", strconv.Itoa(g.score))
+	score := fmt.Sprintf("Score: %s$", strconv.Itoa(g.score))
 	// boundScore := text.BoundString(g.titleFont, score)
 	text.Draw(screen, score, g.buttonFont,
 		200, 120,
-		color.Black)
+		color.White)
 
 	// Draw levels
 	levelButtons := make([]Button, len(g.levels))
 	sellLevel := make([]Button, len(g.levels))
 	for i, level := range g.levels {
+		// levelColor := groundColor
+		// levelColorHover := groundColor
+		// levelColorHover.R += 20
+		// levelColorHover.G += 20
+		// levelColorHover.B += 20
+
 		levelButtons[i] = Button{
 			X: 200, Y: 150 + float64(i)*80, Width: 200, Height: 60,
 			Text:       level.Name,
-			Color:      color.RGBA{R: 70, G: 70, B: 180, A: 255},
-			HoverColor: color.RGBA{R: 100, G: 100, B: 220, A: 255},
+			Color:      groundColor,
+			HoverColor: groundColorHover,
 			Action: func(lvlIdx int) func() {
 				return func() {
 					if !g.levels[lvlIdx].Finished {
@@ -603,11 +692,18 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 			}(i),
 		}
 
+		sellLevelBtnCol := groundColor
+		sellLevelBtnColHover := groundColorHover
+		if level.Finished {
+			sellLevelBtnCol = ballColor
+			sellLevelBtnColHover = ballColorBig
+		}
+
 		sellLevel[i] = Button{
-			X: levelButtons[i].X + levelButtons[i].Width, Y: 150 + float64(i)*80, Width: 50, Height: 60,
-			Text:       "sell",
-			Color:      color.RGBA{R: 70, G: 70, B: 180, A: 255},
-			HoverColor: color.RGBA{R: 100, G: 100, B: 220, A: 255},
+			X: levelButtons[i].X + levelButtons[i].Width + 10, Y: 150 + float64(i)*80, Width: 150, Height: 60,
+			Text:       fmt.Sprintf("%d$", level.Score),
+			Color:      sellLevelBtnCol,
+			HoverColor: sellLevelBtnColHover,
 			Action: func(lvlIdx int) func() {
 				return func() {
 					err := resetLevel(g.levels[lvlIdx], g)
@@ -617,7 +713,7 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 		}
 
 		// Draw level button
-		g.drawButton(screen, &levelButtons[i])
+		g.drawProgressButton(screen, &levelButtons[i], *level)
 		if levelButtons[i].IsClicked() {
 			levelButtons[i].Action()
 		}
@@ -627,20 +723,26 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 		if sellLevel[i].IsClicked() {
 			sellLevel[i].Action()
 		}
-
-		// Draw level info (number and score)
-		infoText := ""
-		if level.Finished {
-			infoText = "FINISHED"
-		}
-
-		infoText += " | " + fmt.Sprintf("Score: %d", level.Score) + "$"
-		infoText += " | " + strconv.Itoa(calculateLevelProgress(*level)) + "%"
-
-		text.Draw(screen, infoText, g.menuFont,
-			620, int(180+float64(i)*80),
-			color.Black)
 	}
+
+	// Draw return button
+
+	returnBtn := Button{
+		X: 10, Y: ScreenHeight - 70, Width: 60, Height: 60,
+		Text:       "return",
+		Color:      groundColor,
+		HoverColor: groundColorHover,
+		Action: func() {
+			g.currentState = StateMenu
+		},
+	}
+	g.drawReturnButton(screen, &returnBtn)
+
+	if returnBtn.IsClicked() {
+		returnBtn.Action()
+	}
+
+	// g.drawReturnButton(screen, &returnBtn)
 }
 
 func (g *Game) drawButton(screen *ebiten.Image, btn *Button) {
@@ -663,6 +765,100 @@ func (g *Game) drawButton(screen *ebiten.Image, btn *Button) {
 	textX := btn.X + (btn.Width-float64(bounds.Dx()))/2
 	textY := btn.Y + (btn.Height)/2 + float64(bounds.Dy())/2
 	text.Draw(screen, btn.Text, g.buttonFont, int(textX), int(textY), color.White)
+}
+
+func (g *Game) drawProgressButton(screen *ebiten.Image, btn *Button, level Level) {
+	// Check hover state
+	mx, my := ebiten.CursorPosition()
+	hover := float64(mx) > btn.X && float64(mx) < btn.X+btn.Width &&
+		float64(my) > btn.Y && float64(my) < btn.Y+btn.Height
+
+	// Choose color
+	btnColor := btn.Color
+	if hover {
+		btnColor = btn.HoverColor
+	}
+
+	// Draw button
+	ebitenutil.DrawRect(screen, btn.X, btn.Y, btn.Width, btn.Height, btnColor)
+	// Draw progress
+	progressWidth := btn.Width * float64(calculateLevelProgress(level)) / 100
+	ebitenutil.DrawRect(screen, btn.X, btn.Y, progressWidth, btn.Height, ballColor)
+
+	// Draw button text
+	bounds := text.BoundString(g.buttonFont, btn.Text)
+	textX := btn.X + (btn.Width-float64(bounds.Dx()))/2
+	textY := btn.Y + (btn.Height)/2 + float64(bounds.Dy())/2
+	text.Draw(screen, btn.Text, g.buttonFont, int(textX), int(textY), color.White)
+}
+
+func (g *Game) drawReturnButton(screen *ebiten.Image, btn *Button) {
+	// Check hover state
+	mx, my := ebiten.CursorPosition()
+	hover := float64(mx) > btn.X && float64(mx) < btn.X+btn.Width &&
+		float64(my) > btn.Y && float64(my) < btn.Y+btn.Height
+
+	// Choose color
+	btnColor := btn.Color
+	var arrowColor color.RGBA = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	if hover {
+		btnColor = btn.HoverColor
+		arrowColor = color.RGBA{R: 0, G: 0, B: 0, A: 255}
+	}
+
+	// Draw button
+	ebitenutil.DrawRect(screen, btn.X, btn.Y, btn.Width, btn.Height, btnColor)
+
+	tex := ebiten.NewImage(1, 1)
+	for y := 0; y < 1; y++ {
+		for x := 0; x < 1; x++ {
+			tex.Set(x, y, arrowColor) // Light stripe
+		}
+	}
+
+	arrowSize := float32(btn.Width / 3) // Size of the arrow
+	arrowX := float32(btn.X + btn.Width/2 - (btn.Width / 6))
+	arrowY := float32(btn.Y + btn.Height/2)
+
+	// Create triangle vertices (left-pointing arrow)
+	vertices := []ebiten.Vertex{
+		// Tip of the arrow (left point)
+		{
+			DstX:   arrowX,
+			DstY:   arrowY,
+			ColorR: float32(arrowColor.R),
+			ColorG: float32(arrowColor.G),
+			ColorB: float32(arrowColor.B),
+			ColorA: float32(arrowColor.A),
+		},
+		// Top right point
+		{
+			DstX:   arrowX + arrowSize,
+			DstY:   arrowY - arrowSize/2,
+			ColorR: float32(arrowColor.R),
+			ColorG: float32(arrowColor.G),
+			ColorB: float32(arrowColor.B),
+			ColorA: float32(arrowColor.A),
+		},
+		// Bottom right point
+		{
+			DstX:   arrowX + arrowSize,
+			DstY:   arrowY + arrowSize/2,
+			ColorR: float32(arrowColor.R),
+			ColorG: float32(arrowColor.G),
+			ColorB: float32(arrowColor.B),
+			ColorA: float32(arrowColor.A),
+		},
+	}
+
+	// Triangle indices (order to draw vertices)
+	indices := []uint16{0, 1, 2}
+
+	// Draw the triangle
+	screen.DrawTriangles(vertices, indices, tex, &ebiten.DrawTrianglesOptions{
+		AntiAlias: true, // Smooth edges
+	})
+
 }
 
 func (g *Game) getCurrentLevel() *Level {

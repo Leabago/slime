@@ -3,24 +3,26 @@ package game
 import "math"
 
 type Segment struct {
-	a, b         Vector
+	A            Vector `json:"a"`
+	B            Vector `json:"b"`
 	closestPoint Vector
 	normal       Vector
 	savePoint    *SavePoint
 	isRed        bool
+	isMovingWall bool
 }
 
 func (s Segment) Normal() Vector {
-	dx := s.b.X - s.a.X
-	dy := s.b.Y - s.a.Y
+	dx := s.B.X - s.A.X
+	dy := s.B.Y - s.A.Y
 	return Vector{-dy, dx}.Normalize()
 }
 
 func (s Segment) Offset(d float64) Segment {
 	n := s.Normal().Mul(d)
 	return Segment{
-		a: s.a.Add(n),
-		b: s.b.Add(n),
+		A: s.A.Add(n),
+		B: s.B.Add(n),
 	}
 }
 
@@ -29,13 +31,13 @@ func (s Segment) OffsetPoint(p Vector, offset float64) Vector {
 }
 
 func (s Segment) MinY() float64 {
-	return math.Min(s.a.Y, s.b.Y)
+	return math.Min(s.A.Y, s.B.Y)
 }
 
 func (s Segment) MaxY() float64 {
-	return math.Max(s.a.Y, s.b.Y)
+	return math.Max(s.A.Y, s.B.Y)
 }
 
 func (s Segment) AvrX() float64 {
-	return (s.b.X + s.a.X) / 2
+	return (s.B.X + s.A.X) / 2
 }

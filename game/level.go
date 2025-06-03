@@ -8,16 +8,16 @@ import (
 )
 
 type Level struct {
-	Name      string     `json:"name"`
-	Ticker    string     `json:"ticker"`
-	Number    int        `json:"number"`
-	Finished  bool       `json:"finished"`
-	SavePoint *SavePoint `json:"savePoint,omitempty"`
-	ChartFile string     `json:"chartFile"`
-	Score     int        `json:"score"`
-	MaxX      float64    `json:"maxX"`
-	// MaxY the graph crosses zero and becomes negative. Keep as negative value
-	MaxY float64 `json:"maxY"`
+	Name       string     `json:"name"`
+	Ticker     string     `json:"ticker"`
+	ChartFile  string     `json:"chartFile"`
+	Number     int        `json:"number"`
+	Finished   bool       `json:"finished"`
+	Score      int        `json:"score"`
+	SavePoint  *SavePoint `json:"savePoint,omitempty"`
+	MovingWall *Segment   `json:"movingWall,omitempty"`
+	MaxX       float64    `json:"maxX,omitempty"`
+	MaxY       float64    `json:"maxY,omitempty"` // MaxY the graph crosses zero and becomes negative. Keep as negative value
 }
 
 func saveBinary(data interface{}, filename string) error {

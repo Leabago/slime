@@ -20,57 +20,61 @@ type BorderSquare struct {
 }
 
 func (b *BorderSquare) leftX() float64 {
-	return b.top.a.X
+	return b.top.A.X
 }
 
 func (b *BorderSquare) rightX() float64 {
-	return b.top.b.X
+	return b.top.B.X
 }
 
 func (b *BorderSquare) topY() float64 {
-	return b.left.b.Y
+	return b.left.B.Y
 }
 
 func (b *BorderSquare) bottomY() float64 {
-	return b.left.a.Y
+	return b.left.A.Y
 }
 
 // minY - higest point
 // maxY - lowest point
 func newBorderSquare(ground []*Segment, minY, maxY float64) BorderSquare {
 
-	leftX := ground[0].a.X
-	rightX := ground[len(ground)-1].b.X
+	leftX := ground[0].A.X
+	rightX := ground[len(ground)-1].B.X
 
-	leftY := ground[0].a.Y
-	rightY := ground[len(ground)-1].b.Y
+	leftY := ground[0].A.Y
+	rightY := ground[len(ground)-1].B.Y
 
 	return BorderSquare{
 		left: Segment{
-			a: Vector{X: leftX, Y: maxY},
-			b: Vector{X: leftX, Y: minY},
+			A:     Vector{X: leftX, Y: maxY},
+			B:     Vector{X: leftX, Y: minY},
+			isRed: true,
 		},
 		top: Segment{
-			a: Vector{X: leftX, Y: minY},
-			b: Vector{X: rightX, Y: minY},
+			A:     Vector{X: leftX, Y: minY},
+			B:     Vector{X: rightX, Y: minY},
+			isRed: true,
 		},
 		right: Segment{
-			a: Vector{X: rightX, Y: minY},
-			b: Vector{X: rightX, Y: maxY},
+			A:     Vector{X: rightX, Y: minY},
+			B:     Vector{X: rightX, Y: maxY},
+			isRed: true,
 		},
 		bottom: Segment{
-			a: Vector{X: rightX, Y: maxY + bottomDown},
-			b: Vector{X: leftX, Y: maxY + bottomDown},
+			A:     Vector{X: rightX, Y: maxY + bottomDown},
+			B:     Vector{X: leftX, Y: maxY + bottomDown},
+			isRed: true,
 		},
 
 		drawLeft: Segment{
-			a: Vector{X: leftX, Y: leftY},
-			b: Vector{X: leftX, Y: minY},
+			A: Vector{X: leftX, Y: leftY},
+			B: Vector{X: leftX, Y: minY},
 		},
 
 		drawRight: Segment{
-			a: Vector{X: rightX, Y: minY},
-			b: Vector{X: rightX, Y: rightY},
+			A: Vector{X: rightX, Y: minY},
+			B: Vector{X: rightX, Y: rightY},
 		},
 
 		position: Vector{X: leftX, Y: minY},

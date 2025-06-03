@@ -31,16 +31,28 @@ type BallPhysic struct {
 // 	scrambleWall: Vector{0.0, -1.0},
 // }
 
+// var ballPhysicA = BallPhysic{
+// 	state:        0,
+// 	gravity:      0.8,
+// 	friction:     0.98,
+// 	radius:       25.0,
+// 	speedRun:     1.0,
+// 	jump:         Vector{0.0, -0.8},
+// 	jumpForce:    10.0,
+// 	scrambleWall: Vector{0.0, -0.0},
+// 	bounceFactor: 0.6, // 0 = no bounce, 1 = perfect bounce
+// }
+
 var ballPhysicA = BallPhysic{
 	state:        0,
-	gravity:      0.8,
+	gravity:      1,
 	friction:     0.98,
-	radius:       25.0,
+	radius:       30.0,
 	speedRun:     1.0,
 	jump:         Vector{0.0, -0.8},
 	jumpForce:    10.0,
 	scrambleWall: Vector{0.0, -0.0},
-	bounceFactor: 0.6, // 0 = no bounce, 1 = perfect bounce
+	bounceFactor: 1, // 0 = no bounce, 1 = perfect bounce
 
 }
 
@@ -48,7 +60,7 @@ var ballPhysicB = BallPhysic{
 	state:        1,
 	gravity:      0.5,
 	friction:     0.1,
-	radius:       40,
+	radius:       45,
 	speedRun:     2,
 	jump:         Vector{0.0, 0.0},
 	jumpForce:    10,

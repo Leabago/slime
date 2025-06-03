@@ -81,8 +81,8 @@ func isCircleRectangleColl(circle Vector, radius float64, borderSquare BorderSqu
 
 // findMinMaxY return minY and maxY
 func findMinMaxY(segments []*Segment) (float64, float64) {
-	minY := segments[0].a.Y
-	maxY := segments[0].a.Y
+	minY := segments[0].A.Y
+	maxY := segments[0].A.Y
 
 	for _, s := range segments {
 		if s.MinY() < minY {
@@ -176,7 +176,7 @@ func resetLevel(level *Level, game *Game) error {
 		game.score += level.Score * 2
 	}
 
-	level.Score = 0
+	level.Score = levelFirstScore
 	level.Finished = false
 	level.SavePoint = nil
 

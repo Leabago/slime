@@ -60,8 +60,8 @@ func (b *Ball) Update(collisionSeg *[]Segment, ground []*Segment, lastX *float64
 	}
 
 	// Jump if on ground
-	if ebiten.IsKeyPressed(ebiten.KeySpace) && b.onGround && game.score > 0 {
-		game.score--
+	if ebiten.IsKeyPressed(ebiten.KeySpace) && b.onGround && game.getCurrentLevel().Score > 0 {
+		game.getCurrentLevel().Score--
 		b.onGround = false
 		b.jumpVel = b.jumpVel.Mul(b.currPhyState.jumpForce)
 		b.vel = b.vel.Add(b.jumpVel)
@@ -81,6 +81,10 @@ func (b *Ball) Update(collisionSeg *[]Segment, ground []*Segment, lastX *float64
 	// limit velocity
 	if b.vel.Y > 20 {
 		b.vel.Y = 20
+	}
+
+	if b.vel.Y < -20 {
+		b.vel.Y = -20
 	}
 	if b.vel.X > 10 {
 		b.vel.X = 10
@@ -147,13 +151,13 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment, lastX 
 
 	for _, seg := range ground {
 		// current position
-		closest := closestPointOnSegment(seg.a, seg.b, b.pos)
+		closest := closestPointOnSegment(seg.A, seg.B, b.pos)
 		distVec := b.pos.Sub(closest)
 		dist := distVec.Len()
 
 		// true - collision with segment
 		if dist < b.radius+wallThickness {
-			*lastX = seg.a.X
+			*lastX = seg.A.X
 
 			// Push the wheel out of the ground
 			normal := distVec.Normalize()
@@ -166,8 +170,8 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment, lastX 
 			penetrationSum += penetration
 
 			// if segment is red then minus score
-			if seg.isRed && game.score > 0 {
-				game.score--
+			if seg.isRed && game.getCurrentLevel().Score > 0 {
+				game.getCurrentLevel().Score--
 			}
 		}
 
@@ -178,13 +182,11 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment, lastX 
 				b.onGround = true
 				seg.savePoint = nil
 
-				game.score += savePointScore
 				game.getCurrentLevel().Score += savePointScore
 
 				// collision with finish
 				if game.getCurrentLevel().SavePoint.IsFinish {
 					game.getCurrentLevel().Score += savePointScore * 5
-					game.score += savePointScore * 5
 					game.getCurrentLevel().Finished = true
 				}
 			}
@@ -204,13 +206,12 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment, lastX 
 		// Handle velocity response
 		velDot := b.vel.Dot(avgNormal)
 		if velDot < 0 {
-			b.vel = b.vel.Sub(avgNormal.Mul(velDot)).Mul(b.currPhyState.friction)
-		}
+			// friction
+			// b.vel = b.vel.Sub(avgNormal.Mul(velDot)).Mul(b.currPhyState.friction)
 
-		if velDot < 0 {
-			// Reflect velocity along the collision normal
+			// Reflect velocity along the collision normal, friction
 			reflected := b.vel.Sub(avgNormal.Mul(velDot))
-			b.vel = reflected.Mul(b.currPhyState.bounceFactor)
+			b.vel = reflected.Mul(b.currPhyState.bounceFactor).Mul(b.currPhyState.friction)
 		}
 
 		// to avoid falling between two segments
