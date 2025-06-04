@@ -41,3 +41,13 @@ func (s Segment) MaxY() float64 {
 func (s Segment) AvrX() float64 {
 	return (s.B.X + s.A.X) / 2
 }
+
+func (s Segment) GetPosWithMinY() Vector {
+	minY := math.Min(s.A.Y, s.B.Y)
+
+	if minY == s.A.Y {
+		return s.A
+	} else {
+		return s.B
+	}
+}

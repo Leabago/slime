@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -50,8 +51,8 @@ const (
 	levelFirstScore = 0
 
 	// movingWall speed
-	movWallSpeedHight = 10
-	movWallSpeedSlow  = 3
+	movWallSpeedHight = 15
+	movWallSpeedSlow  = 2
 )
 
 // Draw variables
@@ -143,10 +144,10 @@ func (g *Game) Update() error {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
 			g.currentState = StateLevelSelect
 			g.fractions = []Vector{}
-			err = saveBinary(g.score, filepath.Join(GameFilesDir, scoreFileName))
-			if err != nil {
-				return err
-			}
+			// err = saveBinary(g.score, filepath.Join(GameFilesDir, scoreFileName))
+			// if err != nil {
+			// 	return err
+			// }
 
 			// save level to file
 			g.saveCurrentLevel()
@@ -166,8 +167,8 @@ func (g *Game) Update() error {
 
 		}
 
+		// increse speed if movingWall too far
 		distanceWallBall := math.Abs(g.ball.pos.X - g.movingWall.A.X)
-
 		if distanceWallBall > ScreenWidth {
 			g.movingWall.A.X += movWallSpeedHight
 			g.movingWall.B.X += movWallSpeedHight
@@ -176,10 +177,9 @@ func (g *Game) Update() error {
 			g.movingWall.B.X += movWallSpeedSlow
 		}
 
-		// if !(g.getCurrentLevel().SavePoint == nil) {
-		// 	g.movingWall.A.X += 2
-		// 	g.movingWall.B.X += 2
-		// }
+		// update savePoint position
+		updateSavePointPosition(g.groundBuff[0])
+		updateSavePointPosition(g.groundBuff[1])
 
 		// fill unite slice from g.groundBuff[0] and g.groundBuff[1]
 		groundFromBuff := make([]*Segment, 0, len(g.groundBuff[0])+len(g.groundBuff[1]))
@@ -204,6 +204,13 @@ func (g *Game) Update() error {
 		err := g.ball.Update(&g.collisionSeg, groundFromBuff, &lastXcollision, g)
 		if err != nil {
 			return err
+		}
+
+		if g.ball.isDied {
+			g.getCurrentLevel().Score = 0
+			g.getCurrentLevel().SavePoint = nil
+			returnToSelectLevel(g)
+			return nil
 		}
 
 		if g.getCurrentLevel().Finished {
@@ -305,12 +312,20 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 		}
 
 		if i%savePointSpawn == 0 {
+			startPosition := seg.GetPosWithMinY()
+			startPosition = startPosition.Sub(seg.Normal().Mul(15))
+
+			pos := startPosition
+			randInt := float64(rand.Intn(200))
+			pos.Y -= randInt
+
 			seg.savePoint = &SavePoint{
 				Position: Vector{
-					X: seg.AvrX(),
-					Y: seg.MinY() - 100,
+					X: pos.X,
+					Y: pos.Y,
 				},
-				Radius: 20,
+				startPosition: startPosition,
+				Radius:        20,
 			}
 		}
 
@@ -351,17 +366,18 @@ func (g *Game) initializeLevelState(segments []Segment, lastX, maxY float64) err
 	// if the level was launched for the first time
 	if savePoint == nil {
 		savePoint = &SavePoint{}
-		savePoint.Position = getStartPosition(segments)
 
 		g.groundBuff = [2][]*Segment{
 			makeSegments(segments[:groundBuffSize]),
 			makeSegments(segments[groundBuffSize : groundBuffSize*2]),
 		}
 
+		savePoint.Position = getStartPosition(g.groundBuff[0])
+
 		// set moving wall
 		g.movingWall = &Segment{
-			A:            Vector{0, 0},
-			B:            Vector{0, maxY - wallHeight},
+			A:            Vector{-100, 0},
+			B:            Vector{-100, maxY - wallHeight},
 			isMovingWall: true,
 		}
 	} else {

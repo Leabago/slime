@@ -162,9 +162,11 @@ func getStartPositionPtr(segments []*Segment) Vector {
 	avrX := segments[0].AvrX()
 	return Vector{avrX, minY}
 }
-func getStartPosition(segments []Segment) Vector {
-	minY := segments[0].MinY() - ballPhysicA.radius
-	avrX := segments[0].AvrX()
+func getStartPosition(segments []*Segment) Vector {
+	startIndex := int(float64(len(segments)) * 0.05)
+	minY := segments[startIndex].MinY() - ballPhysicA.radius
+	avrX := segments[startIndex].AvrX()
+
 	return Vector{avrX, minY}
 }
 
@@ -191,4 +193,38 @@ func resetLevel(level *Level, game *Game) error {
 	}
 
 	return nil
+}
+
+func returnToSelectLevel(game *Game) {
+	game.currentState = StateLevelSelect
+	game.fractions = []Vector{}
+	game.saveCurrentLevel()
+
+	game.ball = nil
+	game.borderSquare = nil
+	game.movingWall = nil
+}
+
+// updateSavePointPosition update SavePoint position
+func updateSavePointPosition(segments []*Segment) {
+	for _, seg := range segments {
+		// update savePoint position
+		if seg.savePoint != nil {
+
+			if seg.savePoint.movingDown {
+				seg.savePoint.Position = seg.savePoint.Position.Add(Vector{0, 1})
+			} else {
+				seg.savePoint.Position = seg.savePoint.Position.Add(Vector{0, -1})
+			}
+
+			// border bottom
+			if math.Abs(seg.savePoint.Position.Y) < math.Abs(seg.savePoint.startPosition.Y) {
+				seg.savePoint.movingDown = false
+			}
+			// border top
+			if math.Abs(seg.savePoint.Position.Y) > math.Abs(seg.savePoint.startPosition.Y)+100 {
+				seg.savePoint.movingDown = true
+			}
+		}
+	}
 }

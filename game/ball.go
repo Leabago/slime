@@ -14,7 +14,9 @@ type Ball struct {
 
 	jumpVel      Vector
 	currPhyState *BallPhysic
-	// savePoint    *SavePoint
+
+	// check if a moving wall collision has occurred
+	isDied bool
 }
 
 func NewBall(spawnPos Vector) *Ball {
@@ -173,13 +175,18 @@ func (b *Ball) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment, lastX 
 			if seg.isRed && game.getCurrentLevel().Score > 0 {
 				game.getCurrentLevel().Score--
 			}
+
+			// die
+			if seg.isMovingWall {
+				b.isDied = true
+			}
 		}
 
 		// check collision with save point
 		if seg.savePoint != nil {
 			if circleToCircle(b.pos, b.radius, seg.savePoint.Position, seg.savePoint.Radius) {
 				game.getCurrentLevel().SavePoint = seg.savePoint
-				b.onGround = true
+				// b.onGround = true
 				seg.savePoint = nil
 
 				game.getCurrentLevel().Score += savePointScore
