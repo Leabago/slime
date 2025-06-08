@@ -31,11 +31,11 @@ const (
 	multiplyChartX = 10
 	multiplyChartY = -50
 	// groundBuffSize - buffer consist of two slices of ground, groundBuffSize is size of one slice
-	groundBuffSize = 100
+	groundBuffSize = 40
 	// savePointSpawn - how often save points spawns
 	savePointSpawn = 10
 	// savePointScore - add points after collision with save point
-	savePointScore = 30
+	savePointScore = 300
 	// GameFilesDir - files related with game and levels
 	GameFilesDir = "gameFiles"
 	// scoreFileName - file with user score
@@ -45,7 +45,7 @@ const (
 	// max wall height
 	wallHeight = 2000.0
 	// redSegmentSpawn how often red segment spawns
-	redSegmentSpawn = 5
+	redSegmentSpawn = 50
 
 	// levelFirstScore first score at start level
 	levelFirstScore = 0
@@ -64,10 +64,6 @@ var groundColorHover = color.RGBA{30, 90, 90, 255}
 var ballColor = color.RGBA{70, 150, 70, 255}
 var ballColorBig = color.RGBA{90, 180, 90, 200}
 
-// var collSegColor = color.RGBA{1, 1, 1, 255}
-// var fractionsColor = color.RGBA{100, 100, 0, 255}
-// var redColor = color.RGBA{255, 0, 0, 255}
-
 var segmentWidth float32 = 5
 var fractionsRadius = 10
 
@@ -85,6 +81,7 @@ type Game struct {
 	groundBuff [2][]*Segment
 
 	ball         *Ball
+	enemyBall    *Ball
 	collisionSeg []Segment
 	camera       *Camera
 	score        int
@@ -142,111 +139,125 @@ func (g *Game) Update() error {
 		return g.uploadLevel()
 	case StatePlaying:
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
-			g.currentState = StateLevelSelect
-			g.fractions = []Vector{}
-			// err = saveBinary(g.score, filepath.Join(GameFilesDir, scoreFileName))
-			// if err != nil {
-			// 	return err
-			// }
-
-			// save level to file
-			g.saveCurrentLevel()
+			return returnToSelectLevel(g)
 		}
+
 		// game logic here
-
-		// delete old fractions by timer
-		g.frameTimer.Update()
-		if g.frameTimer.IsReady() {
-			g.frameTimer.Reset()
-
-			if len(g.fractions) > 20 {
-				g.fractions = g.fractions[20:len(g.fractions)]
-			} else if len(g.fractions) > 0 {
-				g.fractions = g.fractions[1:len(g.fractions)]
-			}
-
-		}
-
-		// increse speed if movingWall too far
-		distanceWallBall := math.Abs(g.ball.pos.X - g.movingWall.A.X)
-		if distanceWallBall > ScreenWidth {
-			g.movingWall.A.X += movWallSpeedHight
-			g.movingWall.B.X += movWallSpeedHight
-		} else if g.groundBuff[0][0].A.X != 0 {
-			g.movingWall.A.X += movWallSpeedSlow
-			g.movingWall.B.X += movWallSpeedSlow
-		}
-
-		// update savePoint position
-		updateSavePointPosition(g.groundBuff[0])
-		updateSavePointPosition(g.groundBuff[1])
-
-		// fill unite slice from g.groundBuff[0] and g.groundBuff[1]
-		groundFromBuff := make([]*Segment, 0, len(g.groundBuff[0])+len(g.groundBuff[1]))
-		groundFromBuff = append(groundFromBuff, g.groundBuff[0]...)
-		groundFromBuff = append(groundFromBuff, g.groundBuff[1]...)
-
-		lenBuff := len(groundFromBuff)
-		middleSegment := groundFromBuff[int(float64(len(groundFromBuff))/1.5)]
-		lastXbuff := groundFromBuff[len(groundFromBuff)-1].B.X
-
-		minY, maxY := findMinMaxY(groundFromBuff)
-		borderSquare := newBorderSquare(groundFromBuff, minY-wallHeight, maxY)
-		g.borderSquare = &borderSquare
-		groundFromBuff = append(groundFromBuff, &borderSquare.left)
-		groundFromBuff = append(groundFromBuff, &borderSquare.right)
-		groundFromBuff = append(groundFromBuff, &borderSquare.top)
-		groundFromBuff = append(groundFromBuff, &borderSquare.bottom)
-		groundFromBuff = append(groundFromBuff, g.movingWall)
-
-		lastXcollision := 0.0
-
-		err := g.ball.Update(&g.collisionSeg, groundFromBuff, &lastXcollision, g)
-		if err != nil {
-			return err
-		}
-
-		if g.ball.isDied {
-			g.getCurrentLevel().Score = 0
-			g.getCurrentLevel().SavePoint = nil
-			returnToSelectLevel(g)
-			return nil
-		}
-
-		if g.getCurrentLevel().Finished {
-			fmt.Println("win level")
-			g.currentState = StateLevelSelect
-			g.saveCurrentLevel()
-			return nil
-		}
-
-		// update groundBuff if next chunk
-		if g.ball.pos.X > middleSegment.B.X && lenBuff >= groundBuffSize*2 {
-			// Swap buffers
-			g.groundBuff[0], g.groundBuff[1] = g.groundBuff[1], g.groundBuff[0]
-
-			// Calculate safe copy size
-			secondBuffI := int(lastXbuff) / multiplyChartX
-			copySize := min(groundBuffSize, len(g.ground)-secondBuffI)
-
-			// Reset and populate the new buffer
-			g.groundBuff[1] = make([]*Segment, copySize)
-			for i := 0; i < copySize; i++ {
-				g.groundBuff[1][i] = &g.ground[secondBuffI+i]
-			}
-
-			// update wall
-			if g.movingWall.A.X > g.ball.pos.X {
-				g.movingWall.A.X = g.groundBuff[0][0].A.X
-				g.movingWall.B.X = g.groundBuff[0][0].A.X
-			}
-		}
-
-		// Update camera
-		g.camera.Update(g.ball.pos.X, g.ball.pos.Y)
-
+		return g.gameUpdate()
 	}
 	return err
+}
+
+func (g *Game) gameUpdate() error {
+	// delete old fractions by timer
+	g.updateFrame()
+	// update MovingWall
+	g.updateMovingWall()
+
+	// update savePoint position
+	updateSavePointPosition(g.groundBuff[0])
+	updateSavePointPosition(g.groundBuff[1])
+
+	// update enemy
+	if g.enemyBall != nil {
+		g.enemyBall.pos = g.enemyBall.pos.Add(g.enemyBall.vel)
+	}
+	// fill Ground slice
+	groundFromBuff, lenBuff, middleSegment, lastXbuff := g.fillGround()
+
+	err := g.ball.Update(&g.collisionSeg, groundFromBuff, g)
+	if err != nil {
+		return err
+	}
+
+	if g.ball.isDied {
+		g.getCurrentLevel().Score = 0
+		g.getCurrentLevel().SavePoint = nil
+		return returnToSelectLevel(g)
+
+	}
+
+	if g.getCurrentLevel().Finished {
+		return returnToSelectLevel(g)
+	}
+
+	g.updateGroundBuffer(middleSegment, lenBuff, lastXbuff)
+
+	// Update camera
+	g.camera.Update(g.ball.pos.X, g.ball.pos.Y)
+
+	return nil
+}
+
+func (g *Game) updateGroundBuffer(middleSegment *Segment, lenBuff int, lastXbuff float64) {
+	// update groundBuff if next chunk
+	if g.ball.pos.X > middleSegment.B.X && lenBuff >= groundBuffSize*2 {
+		// Swap buffers
+		g.groundBuff[0], g.groundBuff[1] = g.groundBuff[1], g.groundBuff[0]
+
+		// Calculate safe copy size
+		secondBuffI := int(lastXbuff) / multiplyChartX
+		copySize := min(groundBuffSize, len(g.ground)-secondBuffI)
+
+		// Reset and populate the new buffer
+		g.groundBuff[1] = make([]*Segment, copySize)
+		for i := 0; i < copySize; i++ {
+			g.groundBuff[1][i] = &g.ground[secondBuffI+i]
+		}
+
+		// update wall
+		if g.movingWall.A.X > g.ball.pos.X {
+			g.movingWall.A.X = g.groundBuff[0][0].A.X
+			g.movingWall.B.X = g.groundBuff[0][0].A.X
+		}
+	}
+}
+
+func (g *Game) fillGround() (groundFromBuff []*Segment, lenBuff int, middleSegment *Segment, lastXbuff float64) {
+
+	// fill unite slice from g.groundBuff[0] and g.groundBuff[1]
+	groundFromBuff = make([]*Segment, 0, len(g.groundBuff[0])+len(g.groundBuff[1]))
+	groundFromBuff = append(groundFromBuff, g.groundBuff[0]...)
+	groundFromBuff = append(groundFromBuff, g.groundBuff[1]...)
+
+	lenBuff = len(groundFromBuff)
+	middleSegment = groundFromBuff[int(float64(len(groundFromBuff))/1.5)]
+	lastXbuff = groundFromBuff[len(groundFromBuff)-1].B.X
+
+	borderSquare := newBorderSquare(groundFromBuff)
+	g.borderSquare = &borderSquare
+	groundFromBuff = append(groundFromBuff, &borderSquare.left)
+	groundFromBuff = append(groundFromBuff, &borderSquare.right)
+	groundFromBuff = append(groundFromBuff, &borderSquare.top)
+	groundFromBuff = append(groundFromBuff, g.movingWall)
+
+	return groundFromBuff, lenBuff, middleSegment, lastXbuff
+}
+
+// updateMovingWall update MovingWall
+func (g *Game) updateMovingWall() {
+	// increse speed if movingWall too far
+	distanceWallBall := math.Abs(g.ball.pos.X - g.movingWall.A.X)
+	if distanceWallBall > ScreenWidth {
+		g.movingWall.A.X += movWallSpeedHight
+		g.movingWall.B.X += movWallSpeedHight
+	} else {
+		g.movingWall.A.X += movWallSpeedSlow
+		g.movingWall.B.X += movWallSpeedSlow
+	}
+}
+
+func (g *Game) updateFrame() {
+	g.frameTimer.Update()
+	if g.frameTimer.IsReady() {
+		g.frameTimer.Reset()
+
+		if len(g.fractions) > 20 {
+			g.fractions = g.fractions[20:len(g.fractions)]
+		} else if len(g.fractions) > 0 {
+			g.fractions = g.fractions[1:len(g.fractions)]
+		}
+	}
 }
 
 // saveCurrentLevel marshals level to json and save it in file
@@ -305,6 +316,8 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 	segments := make([]Segment, len(points)-1)
 	maxY := 0.0
 
+	redCount := 100
+
 	for i := 0; i < len(segments); i++ {
 		seg := Segment{
 			A: points[i],
@@ -329,8 +342,14 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 			}
 		}
 
-		if i%redSegmentSpawn == 0 && i > 10 {
+		// set red segment
+		if i%redSegmentSpawn == 0 && i > groundBuffSize {
+			redCount = 0
+		}
+
+		if redCount < 4 {
 			seg.isRed = true
+			redCount++
 		}
 
 		segments[i] = seg
@@ -341,14 +360,16 @@ func (g *Game) createSegments(points []Vector) ([]Segment, float64, float64) {
 	}
 
 	// create last save point
-	segments[len(segments)-1].savePoint = &SavePoint{
-		Position: Vector{
-			X: segments[len(segments)-1].A.X,
-			Y: segments[len(segments)-1].MinY() - 100,
-		},
+	pos := Vector{
+		X: segments[len(segments)-1].A.X,
+		Y: segments[len(segments)-1].MinY() - 100,
+	}
 
-		IsFinish: true,
-		Radius:   40,
+	segments[len(segments)-1].savePoint = &SavePoint{
+		Position:      pos,
+		startPosition: pos,
+		IsFinish:      true,
+		Radius:        50,
 	}
 
 	return segments, segments[len(segments)-1].B.X, maxY
@@ -376,8 +397,8 @@ func (g *Game) initializeLevelState(segments []Segment, lastX, maxY float64) err
 
 		// set moving wall
 		g.movingWall = &Segment{
-			A:            Vector{-100, 0},
-			B:            Vector{-100, maxY - wallHeight},
+			A:            Vector{-ScreenWidth, 0},
+			B:            Vector{-ScreenWidth, maxY - wallHeight},
 			isMovingWall: true,
 		}
 	} else {
@@ -418,6 +439,11 @@ func (g *Game) initializeLevelState(segments []Segment, lastX, maxY float64) err
 
 	g.ball = NewBall(savePoint.Position)
 	g.currentState = StatePlaying
+	spawnEnemy := g.groundBuff[0][len(g.groundBuff[0])-1].A
+	spawnEnemy.Y -= 400
+	spawnEnemy.X -= 600
+	g.enemyBall = NewBall(spawnEnemy)
+	g.enemyBall.vel = Vector{-10, 1}
 
 	return nil
 }
@@ -454,7 +480,12 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 			float32(g.borderSquare.drawRight.B.X-g.camera.X),
 			float32(g.borderSquare.drawRight.B.Y-g.camera.Y),
 			segmentWidth, wallColor, false)
-		// ebitenutil.DrawLine(screen, g.borderSquare.bottom.a.X-g.camera.X, g.borderSquare.bottom.a.Y-g.camera.Y, g.borderSquare.bottom.b.X-g.camera.X, g.borderSquare.bottom.b.Y-g.camera.Y, wallColor)
+		vector.StrokeLine(screen,
+			float32(g.borderSquare.bottom.A.X-g.camera.X),
+			float32(g.borderSquare.bottom.A.Y-g.camera.Y),
+			float32(g.borderSquare.bottom.B.X-g.camera.X),
+			float32(g.borderSquare.bottom.B.Y-g.camera.Y),
+			segmentWidth, wallColor, false)
 		vector.StrokeLine(screen,
 			float32(g.borderSquare.drawLeft.A.X-g.camera.X),
 			float32(g.borderSquare.drawLeft.A.Y-g.camera.Y),
@@ -463,7 +494,7 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 			segmentWidth, wallColor, false)
 	}
 
-	// Draw  moving Wall
+	// Draw moving Wall
 	vector.StrokeLine(screen,
 		float32(g.movingWall.A.X-g.camera.X),
 		float32(g.movingWall.A.Y-g.camera.Y),
@@ -489,6 +520,22 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 		float32(g.ball.pos.X-g.camera.X),
 		float32(g.ball.pos.Y-g.camera.Y),
 		float32(g.ball.radius), ballColor, false)
+
+	// Draw enemy
+	if g.enemyBall != nil {
+		vector.DrawFilledCircle(
+			screen,
+			float32(g.enemyBall.pos.X-g.camera.X),
+			float32(g.enemyBall.pos.Y-g.camera.Y),
+			float32(g.enemyBall.radius), wallColor, false)
+	}
+
+	vector.StrokeLine(screen,
+		float32(g.enemyBall.pos.X-g.camera.X),
+		float32(g.camera.Y-g.camera.Y+ScreenHeight-100),
+		float32(g.enemyBall.pos.X-g.camera.X),
+		float32(g.camera.Y-g.camera.Y+ScreenHeight),
+		2, wallColor, false)
 
 	// Draw collisions
 	// for _, seg := range g.collisionSeg {

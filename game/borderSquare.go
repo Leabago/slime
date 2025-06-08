@@ -1,6 +1,6 @@
 package game
 
-const bottomDown = 200
+const bottomDown = 400
 
 // BorderSquare square with points ABCD clockwise
 // clockwise (left - bottom) - (left - top) - (right - top) - (right - bottom)
@@ -37,7 +37,10 @@ func (b *BorderSquare) bottomY() float64 {
 
 // minY - higest point
 // maxY - lowest point
-func newBorderSquare(ground []*Segment, minY, maxY float64) BorderSquare {
+func newBorderSquare(ground []*Segment) BorderSquare {
+
+	minY, maxY := findMinMaxY(ground)
+	minY -= wallHeight
 
 	leftX := ground[0].A.X
 	rightX := ground[len(ground)-1].B.X
@@ -47,34 +50,40 @@ func newBorderSquare(ground []*Segment, minY, maxY float64) BorderSquare {
 
 	return BorderSquare{
 		left: Segment{
-			A:     Vector{X: leftX, Y: maxY},
-			B:     Vector{X: leftX, Y: minY},
-			isRed: true,
+			A:        Vector{X: leftX, Y: maxY + bottomDown},
+			B:        Vector{X: leftX, Y: minY},
+			isRed:    true,
+			isBorder: true,
 		},
 		top: Segment{
-			A:     Vector{X: leftX, Y: minY},
-			B:     Vector{X: rightX, Y: minY},
-			isRed: true,
+			A:        Vector{X: leftX, Y: minY},
+			B:        Vector{X: rightX, Y: minY},
+			isRed:    true,
+			isBorder: true,
 		},
 		right: Segment{
-			A:     Vector{X: rightX, Y: minY},
-			B:     Vector{X: rightX, Y: maxY},
-			isRed: true,
+			A:        Vector{X: rightX, Y: minY},
+			B:        Vector{X: rightX, Y: maxY + bottomDown},
+			isRed:    true,
+			isBorder: true,
 		},
 		bottom: Segment{
-			A:     Vector{X: rightX, Y: maxY + bottomDown},
-			B:     Vector{X: leftX, Y: maxY + bottomDown},
-			isRed: true,
+			A:        Vector{X: rightX, Y: maxY + bottomDown},
+			B:        Vector{X: leftX, Y: maxY + bottomDown},
+			isRed:    true,
+			isBorder: true,
 		},
 
 		drawLeft: Segment{
-			A: Vector{X: leftX, Y: leftY},
-			B: Vector{X: leftX, Y: minY},
+			A:        Vector{X: leftX, Y: leftY},
+			B:        Vector{X: leftX, Y: minY},
+			isBorder: true,
 		},
 
 		drawRight: Segment{
-			A: Vector{X: rightX, Y: minY},
-			B: Vector{X: rightX, Y: rightY},
+			A:        Vector{X: rightX, Y: minY},
+			B:        Vector{X: rightX, Y: rightY},
+			isBorder: true,
 		},
 
 		position: Vector{X: leftX, Y: minY},

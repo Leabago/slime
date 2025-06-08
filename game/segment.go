@@ -10,6 +10,7 @@ type Segment struct {
 	savePoint    *SavePoint
 	isRed        bool
 	isMovingWall bool
+	isBorder     bool
 }
 
 func (s Segment) Normal() Vector {

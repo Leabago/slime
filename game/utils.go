@@ -195,7 +195,7 @@ func resetLevel(level *Level, game *Game) error {
 	return nil
 }
 
-func returnToSelectLevel(game *Game) {
+func returnToSelectLevel(game *Game) error {
 	game.currentState = StateLevelSelect
 	game.fractions = []Vector{}
 	game.saveCurrentLevel()
@@ -203,6 +203,8 @@ func returnToSelectLevel(game *Game) {
 	game.ball = nil
 	game.borderSquare = nil
 	game.movingWall = nil
+
+	return nil
 }
 
 // updateSavePointPosition update SavePoint position

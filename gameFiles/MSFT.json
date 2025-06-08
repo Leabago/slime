@@ -1,1 +1,1 @@
-{"name":"Microsoft Corp","ticker":"MSFT","chartFile":"chart_MSFT.csv","number":1,"finished":false,"score":0,"movingWall":{"a":{"X":8831,"Y":0},"b":{"X":8831,"Y":-25426.616494521746}},"maxX":25900,"maxY":-23426.616494521746}
+{"name":"Microsoft Corp","ticker":"MSFT","chartFile":"chart_MSFT.csv","number":1,"finished":true,"score":60697,"savePoint":{"position":{"X":25890,"Y":-20828},"radius":50,"isFinish":true},"movingWall":{"a":{"X":24534,"Y":0},"b":{"X":24534,"Y":-25426.616494521746}},"maxX":25900,"maxY":-23426.616494521746}
