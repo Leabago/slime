@@ -25,7 +25,7 @@ func saveBinary(data interface{}, filename string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer Check(file.Close)
 
 	encoder := gob.NewEncoder(file)
 	return encoder.Encode(data)
@@ -36,7 +36,9 @@ func loadBinary(data interface{}, filename string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() error {
+		return file.Close()
+	}()
 
 	decoder := gob.NewDecoder(file)
 
@@ -51,7 +53,7 @@ func saveLevel(level Level) error {
 		return err
 	}
 
-	err = os.WriteFile(filepath.Join(GameFilesDir, getJsonName(level.Ticker)), levelJson, 644)
+	err = os.WriteFile(filepath.Join(GameFilesDir, getJsonName(level.Ticker)), levelJson, 0644)
 	if err != nil {
 		return err
 	}

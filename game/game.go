@@ -1,6 +1,7 @@
 package game
 
 import (
+	"ball/assets"
 	"encoding/json"
 	"fmt"
 	"image/color"
@@ -15,8 +16,10 @@ import (
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-	"github.com/hajimehoshi/ebiten/v2/text"
+	"github.com/hajimehoshi/ebiten/v2/text/v2"
+
 	"github.com/hajimehoshi/ebiten/v2/vector"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
@@ -88,9 +91,6 @@ type Game struct {
 	fractions    []Vector
 	frameTimer   *Timer
 
-	// lastXinChart    float64
-	gameParallelSeg []Segment
-
 	// Game data
 	levels       []*Level
 	currentLevel int
@@ -103,9 +103,6 @@ type Game struct {
 	currentState int
 	menuBg       *ebiten.Image
 
-	// Termination checks if the exit button is pressed in the main menu
-	termination bool
-
 	// wall
 	borderSquare *BorderSquare
 	movingWall   *Segment
@@ -116,7 +113,6 @@ type Game struct {
 func (g *Game) Update() error {
 	//  return error from Draw()
 	if g.drawError != nil {
-		fmt.Println("g.drawError ", g.drawError)
 		return g.drawError
 	}
 
@@ -165,22 +161,25 @@ func (g *Game) gameUpdate() error {
 	// fill Ground slice
 	groundFromBuff, lenBuff, middleSegment, lastXbuff := g.fillGround()
 
-	err := g.ball.Update(&g.collisionSeg, groundFromBuff, g)
-	if err != nil {
-		return err
-	}
+	// update player
+	g.ball.Update(groundFromBuff, g)
+	// update enemy
+	g.updateEnemy()
+	// check collisions and move objects
+	g.CheckCollisions(&g.collisionSeg, groundFromBuff)
 
+	// return if player is died
 	if g.ball.isDied {
 		g.getCurrentLevel().Score = 0
 		g.getCurrentLevel().SavePoint = nil
 		return returnToSelectLevel(g)
 
 	}
-
+	// return if player is finished
 	if g.getCurrentLevel().Finished {
 		return returnToSelectLevel(g)
 	}
-
+	// update Ground Buffer if player reached middle
 	g.updateGroundBuffer(middleSegment, lenBuff, lastXbuff)
 
 	// Update camera
@@ -189,6 +188,7 @@ func (g *Game) gameUpdate() error {
 	return nil
 }
 
+// updateGroundBuffer update Ground Buffer if player reached middle
 func (g *Game) updateGroundBuffer(middleSegment *Segment, lenBuff int, lastXbuff float64) {
 	// update groundBuff if next chunk
 	if g.ball.pos.X > middleSegment.B.X && lenBuff >= groundBuffSize*2 {
@@ -271,7 +271,7 @@ func (g *Game) saveCurrentLevel() error {
 		return err
 	}
 
-	err = os.WriteFile(filepath.Join(GameFilesDir, getJsonName(level.Ticker)), levelJson, 644)
+	err = os.WriteFile(filepath.Join(GameFilesDir, getJsonName(level.Ticker)), levelJson, 0644)
 	if err != nil {
 		return err
 	}
@@ -503,9 +503,9 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 		segmentWidth, wallColor, false)
 
 	// Draw ground
-	// for _, seg := range g.ground {
-	// 	ebitenutil.DrawLine(screen, seg.a.X-g.camera.X, seg.a.Y-g.camera.Y, seg.b.X-g.camera.X, seg.b.Y-g.camera.Y, color.RGBA{100, 200, 100, 255})
-	// }
+	for _, seg := range g.ground {
+		ebitenutil.DrawLine(screen, seg.A.X-g.camera.X, seg.A.Y-g.camera.Y, seg.B.X-g.camera.X, seg.B.Y-g.camera.Y, color.RGBA{100, 200, 100, 255})
+	}
 
 	drawGround(screen, g.groundBuff[0], g.camera)
 	drawGround(screen, g.groundBuff[1], g.camera)
@@ -562,8 +562,12 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 
 	// ebitenutil.DebugPrintAt(screen, "isOnGround:"+strconv.Itoa(g.score), 10, 45)
 	// Draw score
-	text.Draw(screen, fmt.Sprintf("Score: %d$", g.score), g.titleFont, 10, 50, color.White)
-	text.Draw(screen, fmt.Sprintf("Level score: %d$", g.getCurrentLevel().Score), g.buttonFont, 10, 100, color.White)
+
+	options := &text.DrawOptions{}
+	options.GeoM.Translate(10, 10)
+	options.ColorScale.ScaleWithColor(color.White)
+
+	text.Draw(screen, fmt.Sprintf("Level score: %d$", g.getCurrentLevel().Score), assets.ScoreFace, options)
 }
 
 func drawGround(screen *ebiten.Image, ground []*Segment, camera *Camera) {
@@ -605,6 +609,7 @@ func NewGame() (*Game, error) {
 
 	// Menu
 	// Load fonts
+
 	tt, err := opentype.Parse(fonts.MPlus1pRegular_ttf)
 	if err != nil {
 		return nil, err
@@ -683,10 +688,11 @@ func (g *Game) drawMenu(screen *ebiten.Image) {
 
 	// Draw title
 	title := "STOCK JUMPER"
-	bounds := text.BoundString(g.titleFont, title)
-	text.Draw(screen, title, g.titleFont,
-		(ScreenWidth-bounds.Dx())/2, 150,
-		color.White)
+	w, h := text.Measure(title, assets.ScoreFaceBig, 0)
+	options := &text.DrawOptions{}
+	options.GeoM.Translate((ScreenWidth)/2-w/2, 130-h/2)
+	options.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, title, assets.ScoreFaceBig, options)
 
 	// Create and draw buttons
 	buttons := []Button{
@@ -705,7 +711,7 @@ func (g *Game) drawMenu(screen *ebiten.Image) {
 	}
 
 	for i, btn := range buttons {
-		g.drawButton(screen, &buttons[i])
+		drawButtonText(screen, &buttons[i])
 		if btn.IsClicked() {
 			btn.Action()
 		}
@@ -718,30 +724,26 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 
 	// Draw title
 	title := "SELECT LEVEL"
-	bounds := text.BoundString(g.titleFont, title)
-	text.Draw(screen, title, g.titleFont,
-		(ScreenWidth-bounds.Dx())/2, 80,
-		color.White)
+	w, h := text.Measure(title, assets.ScoreFaceBig, 0)
+	options := &text.DrawOptions{}
+	options.GeoM.Translate(ScreenWidth/2-w/2, 50-h/2)
+	options.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, title, assets.ScoreFaceBig, options)
+
+	options2 := &text.DrawOptions{}
+	options2.GeoM.Translate(200, 70)
+	options2.ColorScale.ScaleWithColor(color.White)
 
 	// Draw score
 	score := fmt.Sprintf("Score: %s$", strconv.Itoa(g.score))
-	// boundScore := text.BoundString(g.titleFont, score)
-	text.Draw(screen, score, g.buttonFont,
-		200, 120,
-		color.White)
+	text.Draw(screen, score, assets.ScoreFace, options2)
 
 	// Draw levels
 	levelButtons := make([]Button, len(g.levels))
 	sellLevel := make([]Button, len(g.levels))
 	for i, level := range g.levels {
-		// levelColor := groundColor
-		// levelColorHover := groundColor
-		// levelColorHover.R += 20
-		// levelColorHover.G += 20
-		// levelColorHover.B += 20
-
 		levelButtons[i] = Button{
-			X: 200, Y: 150 + float64(i)*80, Width: 200, Height: 60,
+			X: 200, Y: 150 + float64(i)*80, Width: 400, Height: 60,
 			Text:       level.Name,
 			Color:      groundColor,
 			HoverColor: groundColorHover,
@@ -776,20 +778,19 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 		}
 
 		// Draw level button
-		g.drawProgressButton(screen, &levelButtons[i], *level)
+		drawProgressButton(screen, &levelButtons[i], level)
 		if levelButtons[i].IsClicked() {
 			levelButtons[i].Action()
 		}
 
 		// Draw sell level
-		g.drawButton(screen, &sellLevel[i])
+		drawButtonText(screen, &sellLevel[i])
 		if sellLevel[i].IsClicked() {
 			sellLevel[i].Action()
 		}
 	}
 
 	// Draw return button
-
 	returnBtn := Button{
 		X: 10, Y: ScreenHeight - 70, Width: 60, Height: 60,
 		Text:       "return",
@@ -804,55 +805,6 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 	if returnBtn.IsClicked() {
 		returnBtn.Action()
 	}
-
-	// g.drawReturnButton(screen, &returnBtn)
-}
-
-func (g *Game) drawButton(screen *ebiten.Image, btn *Button) {
-	// Check hover state
-	mx, my := ebiten.CursorPosition()
-	hover := float64(mx) > btn.X && float64(mx) < btn.X+btn.Width &&
-		float64(my) > btn.Y && float64(my) < btn.Y+btn.Height
-
-	// Choose color
-	btnColor := btn.Color
-	if hover {
-		btnColor = btn.HoverColor
-	}
-
-	// Draw button
-	ebitenutil.DrawRect(screen, btn.X, btn.Y, btn.Width, btn.Height, btnColor)
-
-	// Draw button text
-	bounds := text.BoundString(g.buttonFont, btn.Text)
-	textX := btn.X + (btn.Width-float64(bounds.Dx()))/2
-	textY := btn.Y + (btn.Height)/2 + float64(bounds.Dy())/2
-	text.Draw(screen, btn.Text, g.buttonFont, int(textX), int(textY), color.White)
-}
-
-func (g *Game) drawProgressButton(screen *ebiten.Image, btn *Button, level Level) {
-	// Check hover state
-	mx, my := ebiten.CursorPosition()
-	hover := float64(mx) > btn.X && float64(mx) < btn.X+btn.Width &&
-		float64(my) > btn.Y && float64(my) < btn.Y+btn.Height
-
-	// Choose color
-	btnColor := btn.Color
-	if hover {
-		btnColor = btn.HoverColor
-	}
-
-	// Draw button
-	ebitenutil.DrawRect(screen, btn.X, btn.Y, btn.Width, btn.Height, btnColor)
-	// Draw progress
-	progressWidth := btn.Width * float64(calculateLevelProgress(level)) / 100
-	ebitenutil.DrawRect(screen, btn.X, btn.Y, progressWidth, btn.Height, ballColor)
-
-	// Draw button text
-	bounds := text.BoundString(g.buttonFont, btn.Text)
-	textX := btn.X + (btn.Width-float64(bounds.Dx()))/2
-	textY := btn.Y + (btn.Height)/2 + float64(bounds.Dy())/2
-	text.Draw(screen, btn.Text, g.buttonFont, int(textX), int(textY), color.White)
 }
 
 func (g *Game) drawReturnButton(screen *ebiten.Image, btn *Button) {
@@ -863,14 +815,19 @@ func (g *Game) drawReturnButton(screen *ebiten.Image, btn *Button) {
 
 	// Choose color
 	btnColor := btn.Color
-	var arrowColor color.RGBA = color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	arrowColor := color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	if hover {
 		btnColor = btn.HoverColor
 		arrowColor = color.RGBA{R: 0, G: 0, B: 0, A: 255}
 	}
 
 	// Draw button
-	ebitenutil.DrawRect(screen, btn.X, btn.Y, btn.Width, btn.Height, btnColor)
+	vector.DrawFilledRect(screen,
+		float32(btn.X),
+		float32(btn.Y),
+		float32(btn.Width),
+		float32(btn.Height),
+		btnColor, false)
 
 	tex := ebiten.NewImage(1, 1)
 	for y := 0; y < 1; y++ {
@@ -926,4 +883,166 @@ func (g *Game) drawReturnButton(screen *ebiten.Image, btn *Button) {
 
 func (g *Game) getCurrentLevel() *Level {
 	return g.levels[g.currentLevel]
+}
+
+func (g *Game) updateEnemy() {
+	g.enemyBall.vel.X *= 0.5
+	g.enemyBall.vel.Y *= 0.5
+}
+
+// CheckCollisions check collisions and move objects
+func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
+	// average normal
+	avgNormal := Vector{0, 0}
+	collisionSeg := []Segment{}
+	var penetrationSum float64
+	wallThickness := 3.0 // to avoid falling into a segment
+	minVec := math.MaxFloat64
+	velEnemy := Vector{}
+
+	if !isCircleRectangleColl(game.ball.pos, game.ball.radius, *game.borderSquare) {
+		game.ball.vel = Vector{}
+		if game.getCurrentLevel().SavePoint != nil {
+			if isCircleRectangleColl(game.getCurrentLevel().SavePoint.Position, game.ball.radius, *game.borderSquare) {
+				game.ball.pos = game.getCurrentLevel().SavePoint.Position
+			} else {
+				game.ball.pos = getStartPositionPtr(ground)
+			}
+		} else {
+			game.ball.pos = getStartPositionPtr(ground)
+		}
+	}
+
+	// check collision ball with emeny
+	if circleToCircle(game.ball.pos, game.ball.radius, game.enemyBall.pos, game.enemyBall.radius) {
+		game.ball.isDied = true
+	}
+
+	for _, seg := range ground {
+		// current position
+		closest := closestPointOnSegment(seg.A, seg.B, game.ball.pos)
+		distVec := game.ball.pos.Sub(closest)
+		dist := distVec.Len()
+
+		// // current position enemy
+		closestEnemy := closestPointOnSegment(seg.A, seg.B, game.enemyBall.pos)
+		distVecEnemy := game.enemyBall.pos.Sub(closestEnemy)
+		distEnemy := distVecEnemy.Len()
+
+		// check collision enemy with ground
+		if !seg.isMovingWall && !seg.isBorder {
+			if distEnemy < minVec {
+				minVec = distEnemy
+
+				vec := seg.A.Sub(seg.B).Normalize()
+				vec = vec.Add(seg.A.Sub(game.enemyBall.pos).Normalize())
+				velEnemy = vec
+			}
+		}
+
+		// true - collision ball with segment
+		if dist < game.ball.radius+wallThickness {
+
+			// Push the wheel out of the ground
+			normal := distVec.Normalize()
+
+			// params
+			seg.closestPoint = closest
+			seg.normal = normal
+			collisionSeg = append(collisionSeg, *seg)
+			penetration := game.ball.radius + wallThickness - dist
+			penetrationSum += penetration
+
+			// if segment is red then minus score
+			if seg.isRed && game.getCurrentLevel().Score > 0 {
+				game.getCurrentLevel().Score--
+			}
+
+			// die if collision with moving wall
+			if seg.isMovingWall {
+				game.ball.isDied = true
+			}
+		}
+
+		// check collision with save point
+		if seg.savePoint != nil {
+			if circleToCircle(game.ball.pos, game.ball.radius, seg.savePoint.Position, seg.savePoint.Radius) {
+				game.getCurrentLevel().SavePoint = seg.savePoint
+				// b.onGround = true
+				seg.savePoint = nil
+
+				game.getCurrentLevel().Score += savePointScore
+
+				// collision with finish
+				if game.getCurrentLevel().SavePoint.IsFinish {
+					game.getCurrentLevel().Score += savePointScore * 5
+					game.getCurrentLevel().Finished = true
+				}
+			}
+		}
+	}
+
+	// add velocity to enemy
+	if minVec != math.MaxFloat64 {
+		game.enemyBall.vel = game.enemyBall.vel.Add(velEnemy)
+	}
+
+	// respawn enemy
+	closestEnemy := closestPointOnSegment(game.borderSquare.left.A, game.borderSquare.left.B, game.enemyBall.pos)
+	distVecEnemy := game.enemyBall.pos.Sub(closestEnemy)
+	distEnemy := distVecEnemy.Len()
+
+	if distEnemy < game.enemyBall.radius || !isCircleRectangleColl(game.enemyBall.pos, game.enemyBall.radius, *game.borderSquare) {
+		game.enemyBall.pos = game.borderSquare.drawRight.B
+	}
+
+	// add velocity to ball
+	if len(collisionSeg) > 0 {
+		for _, n := range collisionSeg {
+			avgNormal = avgNormal.Add(n.normal)
+		}
+		avgNormal = avgNormal.Normalize()
+
+		// Apply averaged correction
+		avgPenetration := penetrationSum / float64(len(collisionSeg))
+		game.ball.pos = game.ball.pos.Add(avgNormal.Mul(avgPenetration))
+
+		// Handle velocity response
+		velDot := game.ball.vel.Dot(avgNormal)
+		if velDot < 0 {
+
+			// friction
+			game.ball.vel = game.ball.vel.Sub(avgNormal.Mul(velDot)).Mul(game.ball.currPhyState.friction)
+
+			// Reflect velocity along the collision normal, friction
+			// reflected := b.vel.Sub(avgNormal.Mul(velDot))
+			// b.vel = reflected.Mul(b.currPhyState.bounceFactor)
+		}
+
+		// to avoid falling between two segments
+		if avgPenetration > 2 {
+			game.ball.vel = game.ball.vel.Add(Vector{1, -1})
+		}
+
+		game.ball.onGround = true
+		game.ball.doubleJump = 0
+	}
+
+	// get average angle
+	angle := SlopeAngleFromNormal(avgNormal)
+
+	// if state "A" then the ball cannot climb a high slope
+	if game.ball.currPhyState.state == phyStateA {
+		if angle > 70 {
+			game.ball.jumpVel = avgNormal.Add(game.ball.currPhyState.scrambleWall)
+		} else {
+			game.ball.jumpVel = game.ball.currPhyState.jump
+		}
+	}
+	// if state "B" then the ball can slide a slope
+	if game.ball.currPhyState.state == phyStateB {
+		game.ball.jumpVel = game.ball.currPhyState.jump
+	}
+	game.ball.jumpVel = game.ball.jumpVel.Mul(game.ball.currPhyState.jumpForce)
+	*gameCollSeg = collisionSeg
 }

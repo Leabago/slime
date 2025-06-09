@@ -1,1 +1,1 @@
-{"name":"NVIDIA","ticker":"NVDA","chartFile":"chart_NVDA.csv","number":5,"finished":false,"score":0,"movingWall":{"a":{"X":8155,"Y":0},"b":{"X":8155,"Y":-9483.178555273716}},"maxX":25900,"maxY":-7483.178555273716}
+{"name":"NVIDIA","ticker":"NVDA","chartFile":"chart_NVDA.csv","number":5,"finished":false,"score":0,"movingWall":{"a":{"X":3424,"Y":0},"b":{"X":3424,"Y":-9483.178555273716}},"maxX":25900,"maxY":-7483.178555273716}

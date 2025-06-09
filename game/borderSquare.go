@@ -15,8 +15,6 @@ type BorderSquare struct {
 
 	// point A - (left - bottom)
 	position Vector
-
-	bottomDown float64
 }
 
 func (b *BorderSquare) leftX() float64 {

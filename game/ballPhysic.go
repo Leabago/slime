@@ -17,7 +17,6 @@ type BallPhysic struct {
 	jumpForce    float64
 	scrambleWall Vector
 	bounceFactor float64
-	jumpVelFunc  func(jumpVel, normal Vector) Vector
 }
 
 // var ballPhysicA = BallPhysic{

@@ -45,10 +45,7 @@ func circleToCircle(posA Vector, rA float64, posB Vector, rB float64) bool {
 	distY := posB.Y - posA.Y
 	distance := math.Sqrt((distX * distX) + (distY * distY))
 
-	if distance <= rA+rB {
-		return true
-	}
-	return false
+	return distance <= rA+rB
 }
 
 // isCircleRectangleColl check what ball inside BorderSquare
@@ -72,11 +69,7 @@ func isCircleRectangleColl(circle Vector, radius float64, borderSquare BorderSqu
 	distY := math.Abs(circle.Y) - math.Abs(testY)
 	distance := math.Sqrt(distX*distX + distY*distY)
 
-	if distance < radius {
-		return true
-	}
-
-	return false
+	return distance < radius
 }
 
 // findMinMaxY return minY and maxY
@@ -128,7 +121,7 @@ func readLevelCSV(filename string) ([]Vector, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer Check(file.Close)
 
 	records, err := csv.NewReader(file).ReadAll()
 	if err != nil {
@@ -198,7 +191,10 @@ func resetLevel(level *Level, game *Game) error {
 func returnToSelectLevel(game *Game) error {
 	game.currentState = StateLevelSelect
 	game.fractions = []Vector{}
-	game.saveCurrentLevel()
+	err := game.saveCurrentLevel()
+	if err != nil {
+		return err
+	}
 
 	game.ball = nil
 	game.borderSquare = nil
@@ -228,5 +224,12 @@ func updateSavePointPosition(segments []*Segment) {
 				seg.savePoint.movingDown = true
 			}
 		}
+	}
+}
+
+// Check check error in defer
+func Check(f func() error) {
+	if err := f(); err != nil {
+		fmt.Println("Received error:", err)
 	}
 }
