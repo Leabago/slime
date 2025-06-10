@@ -24,13 +24,21 @@ type Ball struct {
 }
 
 func NewBall(spawnPos Vector) *Ball {
-
 	ball := &Ball{
 		pos:          Vector{spawnPos.X, spawnPos.Y},
 		vel:          Vector{0, 0},
 		radius:       ballPhysicA.radius,
 		currPhyState: &ballPhysicA,
 		doubleJump:   0,
+	}
+
+	return ball
+}
+
+func NewEnemyBall() *Ball {
+	ball := &Ball{
+		radius: ballPhysicA.radius,
+		pos:    Vector{-100, 0},
 	}
 
 	return ball
@@ -109,7 +117,7 @@ func (b *Ball) updateControls(game *Game) {
 
 	// Jump if on ground
 	if b.currPhyState == &ballPhysicA {
-		if inpututil.IsKeyJustPressed(ebiten.KeySpace) && game.getCurrentLevel().Score > 0 {
+		if inpututil.IsKeyJustPressed(ebiten.KeySpace) && game.getCurrentLevel().Score.getScore() > 0 {
 
 			if b.doubleJump < 1 && !b.onGround {
 				b.doubleJump++
@@ -118,7 +126,7 @@ func (b *Ball) updateControls(game *Game) {
 
 			if b.onGround {
 				b.onGround = false
-				game.getCurrentLevel().Score--
+				game.getCurrentLevel().Score.minusScore(1)
 				b.vel = b.vel.Add(b.jumpVel)
 				for _, seg := range game.collisionSeg {
 					game.fractions = append(game.fractions, seg.closestPoint)
@@ -128,11 +136,11 @@ func (b *Ball) updateControls(game *Game) {
 	}
 
 	if b.currPhyState == &ballPhysicB {
-		if ebiten.IsKeyPressed(ebiten.KeySpace) && game.getCurrentLevel().Score > 0 {
+		if ebiten.IsKeyPressed(ebiten.KeySpace) && game.getCurrentLevel().Score.getScore() > 0 {
 
 			if b.onGround {
 				b.onGround = false
-				game.getCurrentLevel().Score--
+				game.getCurrentLevel().Score.minusScore(1)
 				b.vel = b.vel.Add(b.jumpVel)
 				for _, seg := range game.collisionSeg {
 					game.fractions = append(game.fractions, seg.closestPoint)

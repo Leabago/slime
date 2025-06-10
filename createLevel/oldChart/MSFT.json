@@ -1,0 +1,20 @@
+{
+    "name": "Microsoft Corp",
+    "ticker": "MSFT",
+    "chartFile": "chart_MSFT.csv",
+    "number": 1,
+    "finished": false,
+    "score": 0,
+    "movingWall": {
+        "a": {
+            "X": 24534,
+            "Y": 0
+        },
+        "b": {
+            "X": 24534,
+            "Y": -25426.616494521746
+        }
+    },
+    "maxX": 25900,
+    "maxY": -23426.616494521746
+}

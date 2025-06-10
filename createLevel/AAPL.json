@@ -1,8 +1,0 @@
-{
-    "name": "Apple Inc",
-    "ticker": "AAPL",
-    "chartFile": "chart_AAPL.csv",
-    "number": 2,
-    "finished": false,
-    "score": 0
-}

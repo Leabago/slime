@@ -1,1 +1,1 @@
-{"name":"Apple Inc","ticker":"AAPL","chartFile":"chart_AAPL.csv","number":2,"finished":false,"score":0,"movingWall":{"a":{"X":14138,"Y":0},"b":{"X":14138,"Y":-14962.818273315932}},"maxX":25900,"maxY":-12962.818273315932}
+{"name":"Apple Inc","ticker":"AAPL","chartFile":"chart_AAPL.csv","number":2,"score":{"currentDifficulty":1,"difficulty":{"0":0,"1":0,"2":0}},"maxX":25900,"maxY":-12962.818273315932,"CurrentDifficulty":1,"levelEntities":{"0":{"finished":false},"1":{"finished":false},"2":{"finished":false}}}

@@ -2,6 +2,7 @@ package game
 
 import (
 	"encoding/csv"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"math"
@@ -17,15 +18,15 @@ func getJsonName(fileName string) string {
 
 // calculateLevelProgress calculate percentage progress level
 func calculateLevelProgress(level Level) int {
-	if level.Finished {
+	if level.getFinished() {
 		return 100
-	} else if level.SavePoint == nil {
+	} else if level.getSavePoint() == nil {
 		return 0
 	} else {
 		if level.MaxX == 0 {
 			return 0
 		} else {
-			return int(level.SavePoint.Position.X * 100 / level.MaxX)
+			return int(level.getSavePoint().Position.X * 100 / level.MaxX)
 		}
 	}
 }
@@ -91,29 +92,55 @@ func findMinMaxY(segments []*Segment) (float64, float64) {
 }
 
 // LoadScore loads the score from file or initializes with default value
-func LoadScore() (*int, error) {
+func LoadScore() (*Score, error) {
 	// load score from file or use default score
-	score := defaultScore
-
+	score := newScore()
 	scoreFilePath := filepath.Join(GameFilesDir, scoreFileName)
-	err := loadBinary(&score, scoreFilePath)
+	err := loadBinary(score, scoreFilePath)
 
 	switch {
 	case err == nil:
 		// Successfully loaded existing score
-		return &score, nil
+		return score, nil
 	case errors.Is(err, os.ErrNotExist):
 		// File doesn't exist - create with default
 		err = saveBinary(score, scoreFilePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize score file: %w", err)
 		}
-		return &score, nil
+		return score, nil
 
 	default:
 		// Other errors (permission, corruption, etc.)
 		return nil, fmt.Errorf("failed to load score: %w", err)
 	}
+}
+
+// saveBinary save gob file
+func saveBinary(data interface{}, filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer Check(file.Close)
+
+	encoder := gob.NewEncoder(file)
+	return encoder.Encode(data)
+}
+
+// loadBinary load gob file
+func loadBinary(data interface{}, filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer func() error {
+		return file.Close()
+	}()
+
+	decoder := gob.NewDecoder(file)
+
+	return decoder.Decode(data)
 }
 
 func readLevelCSV(filename string) ([]Vector, error) {
@@ -165,21 +192,20 @@ func getStartPosition(segments []*Segment) Vector {
 
 // resetLevel set level score to 0 and clean savePoint
 func resetLevel(level *Level, game *Game) error {
-	if !level.Finished {
-		game.score += level.Score
+	if !level.getFinished() {
+		game.score.plusScore(level.Score.getScore())
 	} else {
-		game.score += level.Score * 2
+		game.score.plusScore(level.Score.getScore() * 2)
 	}
 
-	level.Score = levelFirstScore
-	level.Finished = false
-	level.SavePoint = nil
+	level.resetLevel()
 
-	// save in files
-	err := saveLevel(*level)
+	// save level in files
+	err := saveLevel(level)
 	if err != nil {
 		return err
 	}
+	// save score in files
 	err = saveBinary(game.score, filepath.Join(GameFilesDir, scoreFileName))
 	if err != nil {
 		return err
@@ -191,6 +217,7 @@ func resetLevel(level *Level, game *Game) error {
 func returnToSelectLevel(game *Game) error {
 	game.currentState = StateLevelSelect
 	game.fractions = []Vector{}
+
 	err := game.saveCurrentLevel()
 	if err != nil {
 		return err
@@ -220,7 +247,7 @@ func updateSavePointPosition(segments []*Segment) {
 				seg.savePoint.movingDown = false
 			}
 			// border top
-			if math.Abs(seg.savePoint.Position.Y) > math.Abs(seg.savePoint.startPosition.Y)+100 {
+			if math.Abs(seg.savePoint.Position.Y) > math.Abs(seg.savePoint.startPosition.Y)+savePointWidthMove {
 				seg.savePoint.movingDown = true
 			}
 		}

@@ -1,0 +1,8 @@
+{
+    "name": "Broadcom Inc.",
+    "ticker": "AVGO",
+    "chartFile": "chart/chart_AVGO.csv",
+    "number": 7,
+    "finished": false,
+    "score": 0
+}

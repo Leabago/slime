@@ -6,6 +6,7 @@ from scipy import interpolate
 import pylab as pl  
 import csv
 import json
+import os
 
 
 if __name__ == "__main__":
@@ -14,12 +15,21 @@ if __name__ == "__main__":
     csv_day = []
     num = 0   
     # csv file name 
-    nameStock = input("input csv: ")
+    chartFolder = "chart/"
     stockName = input("stock name: ")
     stockTicker = input("stock ticker: ")
     levelNumber = input("level number: ")
-    
-    with open(nameStock, newline='') as csvfile:
+
+    stockFileCSV = ""
+    files = os.listdir(chartFolder)
+
+    for file in files:
+        if os.path.isfile(os.path.join(chartFolder, file)):
+            stockFileCSV = os.path.join(chartFolder, file)
+            break
+ 
+#  revert
+    with open(stockFileCSV, newline='') as csvfile:
         stockHistory = csv.reader(csvfile, delimiter=',', quotechar='|')
 
         next(stockHistory, None) # skip the headers
@@ -54,8 +64,8 @@ if __name__ == "__main__":
     pl.show()
 
     # open the file in the write mode
-    chartFileName = 'chart_' + stockTicker + '.csv'
-    f = open(chartFileName, 'w', newline='')
+    chartFileName = 'chart_' + stockTicker + '.csv'   
+    f = open(chartFolder + chartFileName, 'w', newline='')
     # create the csv writer
     writer = csv.writer(f)
     # write a row to the csv file  
@@ -91,11 +101,10 @@ if __name__ == "__main__":
     "chartFile": chartFileName,
     "number": int(levelNumber),
     "finished": False,
-    "score": 0
     }
 
     # Convert to JSON string
     json_string = json.dumps(data, indent=4)
     print(json_string)
-    with open(stockTicker + '.json', 'w') as json_file:
+    with open(chartFolder + stockTicker + '.json', 'w') as json_file:
         json.dump(data, json_file, indent=4)

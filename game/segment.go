@@ -9,7 +9,7 @@ type Segment struct {
 	normal       Vector
 	savePoint    *SavePoint
 	isRed        bool
-	isMovingWall bool
+	IsMovingWall bool `json:"isMovingWall"`
 	isBorder     bool
 }
 

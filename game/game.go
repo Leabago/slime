@@ -15,7 +15,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -33,42 +32,87 @@ const (
 	// multiplyChartY = -20
 	multiplyChartX = 10
 	multiplyChartY = -50
-	// groundBuffSize - buffer consist of two slices of ground, groundBuffSize is size of one slice
-	groundBuffSize = 40
-	// savePointSpawn - how often save points spawns
-	savePointSpawn = 10
-	// savePointScore - add points after collision with save point
-	savePointScore = 300
+
 	// GameFilesDir - files related with game and levels
 	GameFilesDir = "gameFiles"
 	// scoreFileName - file with user score
 	scoreFileName = "score"
 	// defaultScore - score at first start
-	defaultScore = 10000
+	defaultScore = 0
 	// max wall height
 	wallHeight = 2000.0
+)
+
+// EASY
+const (
+	groundBuffSize_EASY     = 80
+	savePointSpawn_EASY     = 7
+	savePointScore_EASY     = 300
+	savePointWidthMove_EASY = 20.0
+	redSegmentSpawn_EASY    = 60
+	movWallSpeedHight_EASY  = 15.0
+	movWallSpeedSlow_EASY   = 2.0
+	enemyBallSlow_EASY      = 0.5
+)
+
+// MEDIUM
+const (
+	groundBuffSize_MEDIUM     = 50
+	savePointSpawn_MEDIUM     = 11
+	savePointScore_MEDIUM     = 200
+	savePointWidthMove_MEDIUM = 60.0
+	redSegmentSpawn_MEDIUM    = 50
+	movWallSpeedHight_MEDIUM  = 16.0
+	movWallSpeedSlow_MEDIUM   = 4.0
+	enemyBallSlow_MEDIUM      = 0.7
+)
+
+// DIFFICULT
+const (
+	groundBuffSize_DIFFICULT     = 35
+	savePointSpawn_DIFFICULT     = 15
+	savePointScore_DIFFICULT     = 300
+	savePointWidthMove_DIFFICULT = 120.0
+	redSegmentSpawn_DIFFICULT    = 30
+	movWallSpeedHight_DIFFICULT  = 17.0
+	movWallSpeedSlow_DIFFICULT   = 5.0
+	enemyBallSlow_DIFFICULT      = 0.8
+)
+
+var (
+	// groundBuffSize - buffer consist of two slices of ground, groundBuffSize is size of one slice
+	groundBuffSize = groundBuffSize_EASY
+	// savePointSpawn - how often save points spawns
+	savePointSpawn = savePointSpawn_EASY
+	// savePointScore - add points after collision with save point
+	savePointScore = savePointScore_EASY
+	// savePointWidthMove amplitude of upward movement
+	savePointWidthMove = savePointWidthMove_EASY
 	// redSegmentSpawn how often red segment spawns
-	redSegmentSpawn = 50
-
-	// levelFirstScore first score at start level
-	levelFirstScore = 0
-
-	// movingWall speed
-	movWallSpeedHight = 15
-	movWallSpeedSlow  = 2
+	redSegmentSpawn = redSegmentSpawn_EASY
+	// movWallSpeedHight speed Hight
+	movWallSpeedHight = movWallSpeedHight_EASY
+	// movWallSpeedSlow speed Slow
+	movWallSpeedSlow = movWallSpeedSlow_EASY
+	// enemyBallSlow measure of slowing down, the smaller the slower
+	enemyBallSlow = enemyBallSlow_EASY
 )
 
 // Draw variables
-var playBackground = color.RGBA{0, 0, 0, 255}
-var wallColor = color.RGBA{200, 10, 60, 255}
-var savePointColor = color.RGBA{130, 255, 130, 255}
-var groundColor = color.RGBA{10, 60, 60, 255}
-var groundColorHover = color.RGBA{30, 90, 90, 255}
-var ballColor = color.RGBA{70, 150, 70, 255}
-var ballColorBig = color.RGBA{90, 180, 90, 200}
-
-var segmentWidth float32 = 5
-var fractionsRadius = 10
+var (
+	playBackground           = color.RGBA{0, 0, 0, 255}
+	wallColor                = color.RGBA{200, 10, 60, 255}
+	wallColorHover           = color.RGBA{220, 30, 90, 255}
+	savePointColor           = color.RGBA{130, 255, 130, 255}
+	groundColor              = color.RGBA{10, 60, 60, 255}
+	groundColorHover         = color.RGBA{30, 90, 90, 255}
+	ballColor                = color.RGBA{70, 150, 70, 255}
+	ballColorBig             = color.RGBA{90, 180, 90, 200}
+	yellowColor              = color.RGBA{200, 100, 0, 255}
+	yellowColorHover         = color.RGBA{220, 120, 20, 255}
+	segmentWidth     float32 = 5
+	fractionsRadius          = 10
+)
 
 // Game states
 const (
@@ -87,14 +131,13 @@ type Game struct {
 	enemyBall    *Ball
 	collisionSeg []Segment
 	camera       *Camera
-	score        int
+	score        *Score
 	fractions    []Vector
 	frameTimer   *Timer
 
 	// Game data
 	levels       []*Level
 	currentLevel int
-	scores       map[int]int // level index -> high score
 
 	// Menu
 	menuFont     font.Face
@@ -108,10 +151,12 @@ type Game struct {
 	movingWall   *Segment
 
 	drawError error
+
+	difficulty int
 }
 
 func (g *Game) Update() error {
-	//  return error from Draw()
+	//  return error from Draw
 	if g.drawError != nil {
 		return g.drawError
 	}
@@ -135,6 +180,9 @@ func (g *Game) Update() error {
 		return g.uploadLevel()
 	case StatePlaying:
 		if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+			g.getCurrentLevel().setMovingWall(g.movingWall)
+			g.getCurrentLevel().setEnemyBallPos(&g.enemyBall.pos)
+
 			return returnToSelectLevel(g)
 		}
 
@@ -145,6 +193,7 @@ func (g *Game) Update() error {
 }
 
 func (g *Game) gameUpdate() error {
+
 	// delete old fractions by timer
 	g.updateFrame()
 	// update MovingWall
@@ -170,13 +219,18 @@ func (g *Game) gameUpdate() error {
 
 	// return if player is died
 	if g.ball.isDied {
-		g.getCurrentLevel().Score = 0
-		g.getCurrentLevel().SavePoint = nil
+		g.getCurrentLevel().resetLevel()
+
+		err := saveLevel(g.getCurrentLevel())
+		if err != nil {
+			return err
+		}
+
 		return returnToSelectLevel(g)
 
 	}
 	// return if player is finished
-	if g.getCurrentLevel().Finished {
+	if g.getCurrentLevel().getFinished() {
 		return returnToSelectLevel(g)
 	}
 	// update Ground Buffer if player reached middle
@@ -264,7 +318,6 @@ func (g *Game) updateFrame() {
 func (g *Game) saveCurrentLevel() error {
 	// save level to file
 	level := g.getCurrentLevel()
-	level.MovingWall = g.movingWall
 
 	levelJson, err := json.Marshal(level)
 	if err != nil {
@@ -379,7 +432,7 @@ func (g *Game) initializeLevelState(segments []Segment, lastX, maxY float64) err
 	g.ground = segments
 
 	// get spawn position
-	savePoint := g.getCurrentLevel().SavePoint
+	savePoint := g.getCurrentLevel().getSavePoint()
 
 	fmt.Println("-----------------------------:")
 	fmt.Println("savePoint:", savePoint)
@@ -399,7 +452,7 @@ func (g *Game) initializeLevelState(segments []Segment, lastX, maxY float64) err
 		g.movingWall = &Segment{
 			A:            Vector{-ScreenWidth, 0},
 			B:            Vector{-ScreenWidth, maxY - wallHeight},
-			isMovingWall: true,
+			IsMovingWall: true,
 		}
 	} else {
 		savePointIndex := int(savePoint.Position.X) / multiplyChartX
@@ -425,31 +478,36 @@ func (g *Game) initializeLevelState(segments []Segment, lastX, maxY float64) err
 		// delete savePoint from spawn
 		segments[savePointIndex].savePoint = nil
 
-		if g.getCurrentLevel().MovingWall != nil {
-			g.movingWall = g.getCurrentLevel().MovingWall
+		if g.getCurrentLevel().getMovingWall() != nil {
+			g.movingWall = g.getCurrentLevel().getMovingWall()
 		}
 		if g.movingWall.A.X > savePoint.Position.X || g.movingWall.B.X > savePoint.Position.X || g.movingWall.B.Y > maxY-wallHeight {
 			g.movingWall = &Segment{
 				A:            Vector{g.groundBuff[0][0].A.X, 0},
 				B:            Vector{g.groundBuff[0][0].A.X, maxY - wallHeight},
-				isMovingWall: true,
+				IsMovingWall: true,
 			}
 		}
+
+		// set enemy position
+
 	}
 
+	// set ball and enemy
 	g.ball = NewBall(savePoint.Position)
 	g.currentState = StatePlaying
-	spawnEnemy := g.groundBuff[0][len(g.groundBuff[0])-1].A
-	spawnEnemy.Y -= 400
-	spawnEnemy.X -= 600
-	g.enemyBall = NewBall(spawnEnemy)
-	g.enemyBall.vel = Vector{-10, 1}
+
+	g.enemyBall = NewEnemyBall()
+	// set position if exist
+
+	if g.getCurrentLevel().getEnemyBallPos() != nil {
+		g.enemyBall.pos = *g.getCurrentLevel().getEnemyBallPos()
+	}
 
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-
 	switch g.currentState {
 	case StateMenu:
 		g.drawMenu(screen)
@@ -473,25 +531,25 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 			float32(g.borderSquare.top.A.Y-g.camera.Y),
 			float32(g.borderSquare.top.B.X-g.camera.X),
 			float32(g.borderSquare.top.B.Y-g.camera.Y),
-			segmentWidth, wallColor, false)
+			segmentWidth, yellowColor, false)
 		vector.StrokeLine(screen,
 			float32(g.borderSquare.drawRight.A.X-g.camera.X),
 			float32(g.borderSquare.drawRight.A.Y-g.camera.Y),
 			float32(g.borderSquare.drawRight.B.X-g.camera.X),
 			float32(g.borderSquare.drawRight.B.Y-g.camera.Y),
-			segmentWidth, wallColor, false)
+			segmentWidth, yellowColor, false)
 		vector.StrokeLine(screen,
 			float32(g.borderSquare.bottom.A.X-g.camera.X),
 			float32(g.borderSquare.bottom.A.Y-g.camera.Y),
 			float32(g.borderSquare.bottom.B.X-g.camera.X),
 			float32(g.borderSquare.bottom.B.Y-g.camera.Y),
-			segmentWidth, wallColor, false)
+			segmentWidth, yellowColor, false)
 		vector.StrokeLine(screen,
 			float32(g.borderSquare.drawLeft.A.X-g.camera.X),
 			float32(g.borderSquare.drawLeft.A.Y-g.camera.Y),
 			float32(g.borderSquare.drawLeft.B.X-g.camera.X),
 			float32(g.borderSquare.drawLeft.B.Y-g.camera.Y),
-			segmentWidth, wallColor, false)
+			segmentWidth, yellowColor, false)
 	}
 
 	// Draw moving Wall
@@ -504,7 +562,12 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 
 	// Draw ground
 	for _, seg := range g.ground {
-		ebitenutil.DrawLine(screen, seg.A.X-g.camera.X, seg.A.Y-g.camera.Y, seg.B.X-g.camera.X, seg.B.Y-g.camera.Y, color.RGBA{100, 200, 100, 255})
+		vector.StrokeLine(screen,
+			float32(seg.A.X-g.camera.X),
+			float32(seg.A.Y-g.camera.Y),
+			float32(seg.B.X-g.camera.X),
+			float32(seg.B.Y-g.camera.Y),
+			1, groundColor, false)
 	}
 
 	drawGround(screen, g.groundBuff[0], g.camera)
@@ -560,14 +623,14 @@ func (g *Game) drawPlaying(screen *ebiten.Image) {
 			float32(fractionsRadius), ballColor, false)
 	}
 
-	// ebitenutil.DebugPrintAt(screen, "isOnGround:"+strconv.Itoa(g.score), 10, 45)
 	// Draw score
-
 	options := &text.DrawOptions{}
 	options.GeoM.Translate(10, 10)
 	options.ColorScale.ScaleWithColor(color.White)
+	text.Draw(screen, fmt.Sprintf("Level score: %d$", g.getCurrentLevel().Score.getScore()), assets.ScoreFace, options)
 
-	text.Draw(screen, fmt.Sprintf("Level score: %d$", g.getCurrentLevel().Score), assets.ScoreFace, options)
+	// Draw return button
+	g.drawReturnButton(screen, StateLevelSelect)
 }
 
 func drawGround(screen *ebiten.Image, ground []*Segment, camera *Camera) {
@@ -589,7 +652,7 @@ func drawGround(screen *ebiten.Image, ground []*Segment, camera *Camera) {
 
 		color := groundColor
 		if seg.isRed {
-			color = wallColor
+			color = yellowColor
 		}
 
 		vector.StrokeLine(screen,
@@ -609,7 +672,6 @@ func NewGame() (*Game, error) {
 
 	// Menu
 	// Load fonts
-
 	tt, err := opentype.Parse(fonts.MPlus1pRegular_ttf)
 	if err != nil {
 		return nil, err
@@ -636,7 +698,16 @@ func NewGame() (*Game, error) {
 
 	// Initialize game data
 	levels := []*Level{}
-	scores := make(map[int]int)
+
+	// load score from file or use default score
+	score, err := LoadScore()
+	if err != nil {
+		return nil, err
+	}
+
+	// set variables depending on the Difficulty
+	setDifficultyVars(score.CurrentDifficulty)
+
 	for _, e := range dirEntry {
 		// find levels
 		if strings.Contains(e.Name(), ".json") {
@@ -649,21 +720,24 @@ func NewGame() (*Game, error) {
 			if err != nil {
 				return nil, err
 			}
+
+			if level.Score == nil {
+				level.Score = newScore()
+			}
+
+			if len(level.LevelEntities) == 0 {
+				level.LevelEntities = NewLevelEntities()
+			}
+
+			level.setDifficulty(score.CurrentDifficulty)
+
 			levels = append(levels, level)
-
-			scores[level.Number] = level.Score
 		}
-	}
-
-	// load score from file or use default score
-	score, err := LoadScore()
-	if err != nil {
-		return nil, err
 	}
 
 	game := &Game{
 		frameTimer: NewTimer(80 * time.Millisecond),
-		score:      *score,
+		score:      score,
 
 		camera: &Camera{
 			Width:  float64(ScreenWidth),
@@ -677,7 +751,6 @@ func NewGame() (*Game, error) {
 		currentState: StateMenu,
 		menuBg:       menuBg,
 		levels:       levels,
-		scores:       scores,
 	}
 
 	return game, nil
@@ -697,15 +770,33 @@ func (g *Game) drawMenu(screen *ebiten.Image) {
 	// Create and draw buttons
 	buttons := []Button{
 		{
-			X: ScreenWidth/2 - 200, Y: 200, Width: 400, Height: 60,
-			Text: "PLAY", Color: ballColor,
+			X: ScreenWidth/2 - 200, Y: 200, Width: 200, Height: 60,
+			Text:       "PLAY",
+			Color:      ballColor,
+			HoverColor: ballColorBig,
+			Action:     func() { g.currentState = StateLevelSelect },
+		},
+		{
+			X: ScreenWidth / 2, Y: 200, Width: 200, Height: 60,
+			Text:       getDifficultName(g.score.CurrentDifficulty),
+			Color:      getDifficultColor(g.score.CurrentDifficulty),
+			HoverColor: getDifficultColorHower(g.score.CurrentDifficulty),
+			Action: func() {
+				g.drawError = g.changeDifficulty()
+			},
+		},
+		{
+			X: ScreenWidth/2 - 200, Y: 200, Width: 200, Height: 60,
+			Text:       "PLAY",
+			Color:      ballColor,
 			HoverColor: ballColorBig,
 			Action:     func() { g.currentState = StateLevelSelect },
 		},
 		{
 			X: ScreenWidth/2 - 100, Y: 280, Width: 200, Height: 60,
-			Text: "QUIT", Color: color.RGBA{R: 230, G: 40, B: 40, A: 255},
-			HoverColor: color.RGBA{R: 255, G: 50, B: 50, A: 255},
+			Text:       "QUIT",
+			Color:      wallColor,
+			HoverColor: wallColorHover,
 			Action:     func() { g.currentState = StateTermination },
 		},
 	}
@@ -716,6 +807,7 @@ func (g *Game) drawMenu(screen *ebiten.Image) {
 			btn.Action()
 		}
 	}
+
 }
 
 func (g *Game) drawLevelSelect(screen *ebiten.Image) {
@@ -723,7 +815,9 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 	// screen.Fill(color.RGBA{R: 20, G: 20, B: 40, A: 255})
 
 	// Draw title
-	title := "SELECT LEVEL"
+
+	title := fmt.Sprintf("SELECT LEVEL curr diff: %d$", g.score.CurrentDifficulty)
+	// title := "SELECT LEVEL"
 	w, h := text.Measure(title, assets.ScoreFaceBig, 0)
 	options := &text.DrawOptions{}
 	options.GeoM.Translate(ScreenWidth/2-w/2, 50-h/2)
@@ -735,7 +829,7 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 	options2.ColorScale.ScaleWithColor(color.White)
 
 	// Draw score
-	score := fmt.Sprintf("Score: %s$", strconv.Itoa(g.score))
+	score := fmt.Sprintf("Score: %s$", strconv.Itoa(g.score.getScore()))
 	text.Draw(screen, score, assets.ScoreFace, options2)
 
 	// Draw levels
@@ -749,7 +843,7 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 			HoverColor: groundColorHover,
 			Action: func(lvlIdx int) func() {
 				return func() {
-					if !g.levels[lvlIdx].Finished {
+					if !g.levels[lvlIdx].getFinished() {
 						g.currentLevel = lvlIdx
 						g.currentState = StateLoadingLevel
 					}
@@ -759,14 +853,14 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 
 		sellLevelBtnCol := groundColor
 		sellLevelBtnColHover := groundColorHover
-		if level.Finished {
+		if level.getFinished() {
 			sellLevelBtnCol = ballColor
 			sellLevelBtnColHover = ballColorBig
 		}
 
 		sellLevel[i] = Button{
-			X: levelButtons[i].X + levelButtons[i].Width + 10, Y: 150 + float64(i)*80, Width: 150, Height: 60,
-			Text:       fmt.Sprintf("%d$", level.Score),
+			X: levelButtons[i].X + levelButtons[i].Width + 10, Y: 150 + float64(i)*80, Width: 450, Height: 60,
+			Text:       fmt.Sprintf("%d$", level.Score.getScore()),
 			Color:      sellLevelBtnCol,
 			HoverColor: sellLevelBtnColHover,
 			Action: func(lvlIdx int) func() {
@@ -791,23 +885,19 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 	}
 
 	// Draw return button
-	returnBtn := Button{
+	g.drawReturnButton(screen, StateMenu)
+}
+
+func (g *Game) drawReturnButton(screen *ebiten.Image, returnState int) {
+	btn := Button{
 		X: 10, Y: ScreenHeight - 70, Width: 60, Height: 60,
-		Text:       "return",
 		Color:      groundColor,
 		HoverColor: groundColorHover,
 		Action: func() {
-			g.currentState = StateMenu
+			g.currentState = returnState
 		},
 	}
-	g.drawReturnButton(screen, &returnBtn)
 
-	if returnBtn.IsClicked() {
-		returnBtn.Action()
-	}
-}
-
-func (g *Game) drawReturnButton(screen *ebiten.Image, btn *Button) {
 	// Check hover state
 	mx, my := ebiten.CursorPosition()
 	hover := float64(mx) > btn.X && float64(mx) < btn.X+btn.Width &&
@@ -879,6 +969,10 @@ func (g *Game) drawReturnButton(screen *ebiten.Image, btn *Button) {
 		AntiAlias: true, // Smooth edges
 	})
 
+	// action
+	if btn.IsClicked() {
+		btn.Action()
+	}
 }
 
 func (g *Game) getCurrentLevel() *Level {
@@ -886,8 +980,8 @@ func (g *Game) getCurrentLevel() *Level {
 }
 
 func (g *Game) updateEnemy() {
-	g.enemyBall.vel.X *= 0.5
-	g.enemyBall.vel.Y *= 0.5
+	g.enemyBall.vel.X *= enemyBallSlow
+	g.enemyBall.vel.Y *= enemyBallSlow
 }
 
 // CheckCollisions check collisions and move objects
@@ -902,9 +996,9 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 
 	if !isCircleRectangleColl(game.ball.pos, game.ball.radius, *game.borderSquare) {
 		game.ball.vel = Vector{}
-		if game.getCurrentLevel().SavePoint != nil {
-			if isCircleRectangleColl(game.getCurrentLevel().SavePoint.Position, game.ball.radius, *game.borderSquare) {
-				game.ball.pos = game.getCurrentLevel().SavePoint.Position
+		if game.getCurrentLevel().getSavePoint() != nil {
+			if isCircleRectangleColl(game.getCurrentLevel().getSavePoint().Position, game.ball.radius, *game.borderSquare) {
+				game.ball.pos = game.getCurrentLevel().getSavePoint().Position
 			} else {
 				game.ball.pos = getStartPositionPtr(ground)
 			}
@@ -930,7 +1024,7 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 		distEnemy := distVecEnemy.Len()
 
 		// check collision enemy with ground
-		if !seg.isMovingWall && !seg.isBorder {
+		if !seg.IsMovingWall && !seg.isBorder {
 			if distEnemy < minVec {
 				minVec = distEnemy
 
@@ -954,12 +1048,12 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 			penetrationSum += penetration
 
 			// if segment is red then minus score
-			if seg.isRed && game.getCurrentLevel().Score > 0 {
-				game.getCurrentLevel().Score--
+			if seg.isRed && game.getCurrentLevel().Score.getScore() > 0 {
+				game.getCurrentLevel().Score.setScore(game.getCurrentLevel().Score.getScore() - 1)
 			}
 
 			// die if collision with moving wall
-			if seg.isMovingWall {
+			if seg.IsMovingWall {
 				game.ball.isDied = true
 			}
 		}
@@ -967,16 +1061,16 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 		// check collision with save point
 		if seg.savePoint != nil {
 			if circleToCircle(game.ball.pos, game.ball.radius, seg.savePoint.Position, seg.savePoint.Radius) {
-				game.getCurrentLevel().SavePoint = seg.savePoint
+				game.getCurrentLevel().setSavePoint(seg.savePoint)
 				// b.onGround = true
 				seg.savePoint = nil
 
-				game.getCurrentLevel().Score += savePointScore
+				game.getCurrentLevel().Score.plusScore(savePointScore)
 
 				// collision with finish
-				if game.getCurrentLevel().SavePoint.IsFinish {
-					game.getCurrentLevel().Score += savePointScore * 5
-					game.getCurrentLevel().Finished = true
+				if game.getCurrentLevel().getSavePoint().IsFinish {
+					game.getCurrentLevel().Score.plusScore(savePointScore * 5)
+					game.getCurrentLevel().setFinished(true)
 				}
 			}
 		}
@@ -1045,4 +1139,55 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 	}
 	game.ball.jumpVel = game.ball.jumpVel.Mul(game.ball.currPhyState.jumpForce)
 	*gameCollSeg = collisionSeg
+}
+
+// changeDifficulty change difficulty for score and all levels
+func (g *Game) changeDifficulty() error {
+	difficulty, err := g.score.changeDifficulty()
+	if err != nil {
+		return err
+	}
+
+	for _, l := range g.levels {
+		l.setDifficulty(difficulty)
+
+		err := saveLevel(l)
+		if err != nil {
+			return err
+		}
+	}
+
+	setDifficultyVars(difficulty)
+
+	return nil
+}
+
+// setDifficultyVars set variables depending on the Difficulty
+func setDifficultyVars(difficulty int) {
+	switch difficulty {
+	case Easy:
+		groundBuffSize = groundBuffSize_EASY
+		savePointSpawn = savePointSpawn_EASY
+		savePointScore = savePointScore_EASY
+		savePointWidthMove = savePointWidthMove_EASY
+		redSegmentSpawn = redSegmentSpawn_EASY
+		movWallSpeedHight = movWallSpeedHight_EASY
+		movWallSpeedSlow = movWallSpeedSlow_EASY
+	case Medium:
+		groundBuffSize = groundBuffSize_MEDIUM
+		savePointSpawn = savePointSpawn_MEDIUM
+		savePointScore = savePointScore_MEDIUM
+		savePointWidthMove = savePointWidthMove_MEDIUM
+		redSegmentSpawn = redSegmentSpawn_MEDIUM
+		movWallSpeedHight = movWallSpeedHight_MEDIUM
+		movWallSpeedSlow = movWallSpeedSlow_MEDIUM
+	case Difficult:
+		groundBuffSize = groundBuffSize_DIFFICULT
+		savePointSpawn = savePointSpawn_DIFFICULT
+		savePointScore = savePointScore_DIFFICULT
+		savePointWidthMove = savePointWidthMove_DIFFICULT
+		redSegmentSpawn = redSegmentSpawn_DIFFICULT
+		movWallSpeedHight = movWallSpeedHight_DIFFICULT
+		movWallSpeedSlow = movWallSpeedSlow_DIFFICULT
+	}
 }
