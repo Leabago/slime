@@ -195,7 +195,7 @@ func resetLevel(level *Level, game *Game) error {
 	if !level.getFinished() {
 		game.score.plusScore(level.Score.getScore())
 	} else {
-		game.score.plusScore(level.Score.getScore() * 2)
+		game.score.plusScore(level.Score.getScore() * finishLevelSell)
 	}
 
 	level.resetLevel()

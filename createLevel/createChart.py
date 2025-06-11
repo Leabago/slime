@@ -33,7 +33,10 @@ if __name__ == "__main__":
         stockHistory = csv.reader(csvfile, delimiter=',', quotechar='|')
 
         next(stockHistory, None) # skip the headers
-        for row in stockHistory:                                 
+        rows = list(stockHistory)
+        reversed_rows = reversed(rows)  # Reverse the sequence
+
+        for row in reversed_rows:                               
             try:   
                 x = row[4]
                 x = float(x.replace('"', ''))          
@@ -100,7 +103,6 @@ if __name__ == "__main__":
     "ticker": stockTicker,
     "chartFile": chartFileName,
     "number": int(levelNumber),
-    "finished": False,
     }
 
     # Convert to JSON string

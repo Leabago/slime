@@ -1,6 +1,7 @@
 package main
 
 import (
+	"ball/assets"
 	"ball/game"
 	"fmt"
 	"os"
@@ -21,6 +22,12 @@ func createDirIfNotExist(dirPath string) error {
 }
 
 func main() {
+
+	bgmPlayer := assets.CreatePlayer()
+
+	// Set to loop indefinitely
+	bgmPlayer.SetVolume(0.5) // 50% volume
+	bgmPlayer.Play()
 
 	err := createDirIfNotExist(game.GameFilesDir)
 	if err != nil {

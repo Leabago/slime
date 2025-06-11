@@ -30,7 +30,7 @@ const (
 	// expand chart by x and y
 	// multiplyChartX = 50
 	// multiplyChartY = -20
-	multiplyChartX = 10
+	multiplyChartX = 15
 	multiplyChartY = -50
 
 	// GameFilesDir - files related with game and levels
@@ -41,16 +41,24 @@ const (
 	defaultScore = 0
 	// max wall height
 	wallHeight = 2000.0
+
+	// anglePhyStateA angle of inclination
+	anglePhyStateA = 60
+	// finishLevelSell sell level with 2x
+	finishLevelSell = 2
+
+	// minusScore minus points, in case of collision
+	minusScore = 5
 )
 
 // EASY
 const (
 	groundBuffSize_EASY     = 80
-	savePointSpawn_EASY     = 7
-	savePointScore_EASY     = 300
+	savePointSpawn_EASY     = 10
+	savePointScore_EASY     = 30
 	savePointWidthMove_EASY = 20.0
 	redSegmentSpawn_EASY    = 60
-	movWallSpeedHight_EASY  = 15.0
+	movWallSpeedHight_EASY  = 13.0
 	movWallSpeedSlow_EASY   = 2.0
 	enemyBallSlow_EASY      = 0.5
 )
@@ -58,12 +66,12 @@ const (
 // MEDIUM
 const (
 	groundBuffSize_MEDIUM     = 50
-	savePointSpawn_MEDIUM     = 11
-	savePointScore_MEDIUM     = 200
+	savePointSpawn_MEDIUM     = 12
+	savePointScore_MEDIUM     = 30
 	savePointWidthMove_MEDIUM = 60.0
 	redSegmentSpawn_MEDIUM    = 50
-	movWallSpeedHight_MEDIUM  = 16.0
-	movWallSpeedSlow_MEDIUM   = 4.0
+	movWallSpeedHight_MEDIUM  = 15.0
+	movWallSpeedSlow_MEDIUM   = 3.0
 	enemyBallSlow_MEDIUM      = 0.7
 )
 
@@ -71,11 +79,11 @@ const (
 const (
 	groundBuffSize_DIFFICULT     = 35
 	savePointSpawn_DIFFICULT     = 15
-	savePointScore_DIFFICULT     = 300
+	savePointScore_DIFFICULT     = 30
 	savePointWidthMove_DIFFICULT = 120.0
 	redSegmentSpawn_DIFFICULT    = 30
-	movWallSpeedHight_DIFFICULT  = 17.0
-	movWallSpeedSlow_DIFFICULT   = 5.0
+	movWallSpeedHight_DIFFICULT  = 16.0
+	movWallSpeedSlow_DIFFICULT   = 4.0
 	enemyBallSlow_DIFFICULT      = 0.8
 )
 
@@ -811,13 +819,11 @@ func (g *Game) drawMenu(screen *ebiten.Image) {
 }
 
 func (g *Game) drawLevelSelect(screen *ebiten.Image) {
+	// Background color
 	screen.DrawImage(g.menuBg, nil)
-	// screen.Fill(color.RGBA{R: 20, G: 20, B: 40, A: 255})
 
 	// Draw title
-
-	title := fmt.Sprintf("SELECT LEVEL curr diff: %d$", g.score.CurrentDifficulty)
-	// title := "SELECT LEVEL"
+	title := "SELECT LEVEL"
 	w, h := text.Measure(title, assets.ScoreFaceBig, 0)
 	options := &text.DrawOptions{}
 	options.GeoM.Translate(ScreenWidth/2-w/2, 50-h/2)
@@ -853,14 +859,20 @@ func (g *Game) drawLevelSelect(screen *ebiten.Image) {
 
 		sellLevelBtnCol := groundColor
 		sellLevelBtnColHover := groundColorHover
-		if level.getFinished() {
+		if level.Score.getScore() > 0 {
 			sellLevelBtnCol = ballColor
 			sellLevelBtnColHover = ballColorBig
 		}
 
+		text := fmt.Sprintf("%d$", level.Score.getScore())
+
+		if level.getFinished() {
+			text = fmt.Sprintf("%d(x%d)$", level.Score.getScore(), finishLevelSell)
+		}
+
 		sellLevel[i] = Button{
-			X: levelButtons[i].X + levelButtons[i].Width + 10, Y: 150 + float64(i)*80, Width: 450, Height: 60,
-			Text:       fmt.Sprintf("%d$", level.Score.getScore()),
+			X: levelButtons[i].X + levelButtons[i].Width + 10, Y: 150 + float64(i)*80, Width: 350, Height: 60,
+			Text:       text,
 			Color:      sellLevelBtnCol,
 			HoverColor: sellLevelBtnColHover,
 			Action: func(lvlIdx int) func() {
@@ -1049,7 +1061,7 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 
 			// if segment is red then minus score
 			if seg.isRed && game.getCurrentLevel().Score.getScore() > 0 {
-				game.getCurrentLevel().Score.setScore(game.getCurrentLevel().Score.getScore() - 1)
+				game.getCurrentLevel().Score.minusScore(minusScore)
 			}
 
 			// die if collision with moving wall
@@ -1062,14 +1074,11 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 		if seg.savePoint != nil {
 			if circleToCircle(game.ball.pos, game.ball.radius, seg.savePoint.Position, seg.savePoint.Radius) {
 				game.getCurrentLevel().setSavePoint(seg.savePoint)
-				// b.onGround = true
 				seg.savePoint = nil
-
 				game.getCurrentLevel().Score.plusScore(savePointScore)
 
 				// collision with finish
 				if game.getCurrentLevel().getSavePoint().IsFinish {
-					game.getCurrentLevel().Score.plusScore(savePointScore * 5)
 					game.getCurrentLevel().setFinished(true)
 				}
 			}
@@ -1114,8 +1123,8 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 		}
 
 		// to avoid falling between two segments
-		if avgPenetration > 2 {
-			game.ball.vel = game.ball.vel.Add(Vector{1, -1})
+		if avgPenetration > 5 {
+			game.ball.vel = game.ball.vel.Add(Vector{0.5, -0.5})
 		}
 
 		game.ball.onGround = true
@@ -1127,7 +1136,7 @@ func (game *Game) CheckCollisions(gameCollSeg *[]Segment, ground []*Segment) {
 
 	// if state "A" then the ball cannot climb a high slope
 	if game.ball.currPhyState.state == phyStateA {
-		if angle > 70 {
+		if angle > anglePhyStateA {
 			game.ball.jumpVel = avgNormal.Add(game.ball.currPhyState.scrambleWall)
 		} else {
 			game.ball.jumpVel = game.ball.currPhyState.jump

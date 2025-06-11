@@ -1,1 +1,20 @@
-{"name":"Broadcom Inc.","ticker":"AVGO","chartFile":"chart_AVGO.csv","number":7,"finished":false,"score":0,"movingWall":{"a":{"X":3834,"Y":0},"b":{"X":3834,"Y":-15076.46757484999}},"maxX":26000,"maxY":-13076.46757484999}
+{
+    "name": "Broadcom Inc.",
+    "ticker": "AVGO",
+    "chartFile": "chart_AVGO.csv",
+    "number": 7,
+    "finished": false,
+    "score": 0,
+    "movingWall": {
+        "a": {
+            "X": 3834,
+            "Y": 0
+        },
+        "b": {
+            "X": 3834,
+            "Y": -15076.46757484999
+        }
+    },
+    "maxX": 26000,
+    "maxY": -13076.46757484999
+}
